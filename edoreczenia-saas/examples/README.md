@@ -18,12 +18,14 @@ chmod +x *.sh
 ./11_full_demo.sh
 
 # Lub krok po kroku:
-./01_login.sh
+USERNAME=testuser PASSWORD=testpass123 ./01_login.sh
 ./02_send_message.sh
 ./03_list_messages.sh sent
 ```
 
 ## Lista skryptów
+
+### Podstawowe operacje (01-11)
 
 | Skrypt | Opis |
 |--------|------|
@@ -38,6 +40,19 @@ chmod +x *.sh
 | `09_cqrs_stats.sh` | Statystyki CQRS/Event Store |
 | `10_event_log.sh` | Log zdarzeń |
 | `11_full_demo.sh` | Pełna demonstracja |
+
+### Integracja istniejących skrzynek (20-27)
+
+| Skrypt | Opis |
+|--------|------|
+| `20_connect_mailbox.sh` | Podłączenie istniejącej skrzynki |
+| `21_oauth_connect.sh` | Połączenie przez OAuth2 (oficjalne API) |
+| `22_mobywatel_connect.sh` | Połączenie przez mObywatel |
+| `23_certificate_connect.sh` | Połączenie przez certyfikat kwalifikowany |
+| `24_apikey_connect.sh` | Generowanie klucza API |
+| `25_sync_mailbox.sh` | Synchronizacja skrzynki |
+| `26_list_mailboxes.sh` | Lista połączonych skrzynek |
+| `27_disconnect_mailbox.sh` | Rozłączenie/usunięcie skrzynki |
 
 ## Konfiguracja
 
@@ -118,6 +133,44 @@ API_URL="http://api.example.com" ./01_login.sh
 # Log zdarzeń
 ./10_event_log.sh 50
 ```
+
+### 7. Podłączenie istniejącej skrzynki e-Doręczeń
+
+Jeśli masz już adres e-Doręczeń i chcesz korzystać z SaaS:
+
+```bash
+# Krok 1: Utwórz połączenie
+./20_connect_mailbox.sh "AE:PL-TWOJ-ADRES-1234-01" oauth2 "Moja skrzynka" person
+
+# Krok 2: Autoryzacja (wybierz jedną metodę)
+
+# Opcja A: OAuth2 (oficjalne API e-Doręczeń)
+./21_oauth_connect.sh
+
+# Opcja B: mObywatel
+./22_mobywatel_connect.sh
+
+# Opcja C: Certyfikat kwalifikowany
+./23_certificate_connect.sh conn-xxx certyfikat.p12
+
+# Opcja D: Klucz API (dla systemów)
+./24_apikey_connect.sh
+
+# Krok 3: Synchronizacja
+./25_sync_mailbox.sh
+
+# Sprawdź połączone skrzynki
+./26_list_mailboxes.sh
+```
+
+#### Metody połączenia
+
+| Metoda | Opis | Dla kogo |
+|--------|------|----------|
+| **OAuth2** | Oficjalne API e-Doręczeń | Zalecane dla wszystkich |
+| **mObywatel** | Uwierzytelnienie przez aplikację | Osoby fizyczne |
+| **Certyfikat** | Certyfikat kwalifikowany | Firmy, urzędy |
+| **API Key** | Klucz i sekret | Systemy zewnętrzne (ERP, CRM) |
 
 ## Struktura odpowiedzi
 
