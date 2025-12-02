@@ -13,12 +13,17 @@ services:
       IDCARD_DOMAIN: ${IDCARD_DOMAIN:-localhost}
       IDCARD_URL: ${IDCARD_URL:-http://localhost:4000}
       JWT_SECRET: ${JWT_SECRET:-idcard-secret-key-change-in-production}
+      # Demo użytkownik
+      DEMO_USER_EMAIL: ${DEMO_USER_EMAIL:-demo@idcard.pl}
+      DEMO_USER_PASSWORD: ${DEMO_USER_PASSWORD:-demo123}
+      DEMO_USER_NAME: ${DEMO_USER_NAME:-Demo User}
+      DEMO_USER_COMPANY: ${DEMO_USER_COMPANY:-Demo Company Sp. z o.o.}
       # Szyfromat.pl (e-Doręczenia SaaS)
       SZYFROMAT_API_URL: ${SZYFROMAT_API_URL:-http://localhost:8500}
       SZYFROMAT_CLIENT_ID: ${SZYFROMAT_CLIENT_ID:-idcard_client}
       SZYFROMAT_CLIENT_SECRET: ${SZYFROMAT_CLIENT_SECRET:-idcard_secret}
       # Detax.pl (AI Asystent)
-      DETAX_API_URL: ${DETAX_API_URL:-http://localhost:8000}
+      DETAX_API_URL: ${DETAX_API_URL:-http://localhost:8005}
       # Przyszłe integracje
       EPUAP_API_URL: ${EPUAP_API_URL:-https://epuap.gov.pl/api}
       KSEF_API_URL: ${KSEF_API_URL:-https://ksef.mf.gov.pl/api}
