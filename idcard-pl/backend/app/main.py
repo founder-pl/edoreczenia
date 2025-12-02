@@ -36,6 +36,10 @@ class Config:
     SZYFROMAT_CLIENT_ID = os.getenv("SZYFROMAT_CLIENT_ID", "idcard_client")
     SZYFROMAT_CLIENT_SECRET = os.getenv("SZYFROMAT_CLIENT_SECRET", "idcard_secret")
     
+    # Detax.pl (AI Asystent)
+    DETAX_API_URL = os.getenv("DETAX_API_URL", "http://localhost:8000")
+    
+    # Przyszłe integracje
     EPUAP_API_URL = os.getenv("EPUAP_API_URL", "https://epuap.gov.pl/api")
     KSEF_API_URL = os.getenv("KSEF_API_URL", "https://ksef.mf.gov.pl/api")
 
@@ -319,6 +323,22 @@ async def list_available_services():
                 ],
                 "required_credentials": [],
                 "auth_methods": ["mobywatel_app"]
+            },
+            {
+                "type": "detax",
+                "name": "Detax AI",
+                "description": "AI Asystent dla przedsiębiorców",
+                "provider": "detax.pl",
+                "status": "available",
+                "features": [
+                    "Czat z AI (Bielik LLM)",
+                    "Moduł KSeF - e-Faktury",
+                    "Moduł B2B - ocena ryzyka umów",
+                    "Moduł ZUS - składki społeczne",
+                    "Moduł VAT - JPK, rozliczenia"
+                ],
+                "required_credentials": [],
+                "auth_methods": ["oauth2"]
             }
         ]
     }
@@ -430,8 +450,8 @@ async def connect_edoreczenia(
             )
             
             if response.status_code == 200:
-                detax_data = response.json()
-                external_id = detax_data.get("id")
+                szyfromat_data = response.json()
+                external_id = szyfromat_data.get("id")
             else:
                 # Symulacja dla demo
                 external_id = f"szyfromat-{uuid.uuid4().hex[:8]}"

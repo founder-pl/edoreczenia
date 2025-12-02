@@ -1,20 +1,89 @@
-# e-Doręczenia - Integracja z protokołami pocztowymi
+# Ekosystem Founder.pl - Usługi Cyfrowe
 
-Monorepo zawierające dwa projekty do integracji systemu e-Doręczeń z protokołami pocztowymi IMAP/SMTP.
+Kompleksowe rozwiązanie do obsługi usług cyfrowych dla polskich przedsiębiorców.
+
+## 🏗️ Architektura
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│                     IDCard.pl (Gateway)                         │
+│                Platforma Integracji Usług                       │
+│                    localhost:4000/4100                          │
+└───────────────────────────┬─────────────────────────────────────┘
+                            │
+        ┌───────────────────┼───────────────────┐
+        │                   │                   │
+        ▼                   ▼                   ▼
+┌───────────────┐   ┌───────────────┐   ┌───────────────┐
+│ Szyfromat.pl  │   │   Detax.pl    │   │   (Przyszłe)  │
+│ e-Doręczenia  │   │  AI Asystent  │   │  ePUAP/KSeF   │
+│ :8500/:3500   │   │  :8000/:3000  │   │               │
+└───────────────┘   └───────────────┘   └───────────────┘
+```
 
 ## 📁 Struktura projektu
 
 ```
 edoreczenia/
-├── edoreczenia-proxy-imap-smtp/    # Proxy IMAP/SMTP
-├── edoreczenia-middleware-sync/     # Middleware synchronizujący
-├── LICENSE
+├── idcard-pl/                      # Gateway integracji (idcard.pl)
+├── szyfromat-pl/                   # e-Doręczenia SaaS (szyfromat.pl)
+├── edoreczenia-proxy-imap-smtp/    # Middleware: Proxy IMAP/SMTP
+├── edoreczenia-middleware-sync/    # Middleware: Synchronizacja
+├── edoreczenia-dsl/                # Middleware: DSL
+├── start-all.sh                    # Uruchom wszystko
+├── stop-all.sh                     # Zatrzymaj wszystko
+├── ECOSYSTEM.md                    # Dokumentacja ekosystemu
 └── README.md
 ```
 
+## 🚀 Szybki start
+
+```bash
+# Uruchom wszystkie usługi
+./start-all.sh
+
+# Lub pojedynczo:
+cd szyfromat-pl && docker-compose up -d
+cd idcard-pl && docker-compose up -d
+```
+
+## 🌐 Dostęp (środowisko deweloperskie)
+
+| Usługa | API | Frontend | Domena docelowa |
+|--------|-----|----------|----------------|
+| IDCard.pl | http://localhost:4000 | http://localhost:4100 | idcard.pl |
+| Szyfromat.pl | http://localhost:8500 | http://localhost:3500 | szyfromat.pl |
+| Detax.pl | http://localhost:8000 | http://localhost:3000 | detax.pl |
+
 ## 🎯 Projekty
 
-### 1. [edoreczenia-proxy-imap-smtp](./edoreczenia-proxy-imap-smtp/)
+### 1. [idcard-pl](./idcard-pl/) - Gateway Integracji
+
+**Platforma integracji usług cyfrowych (idcard.pl)**
+
+- 🔗 Zunifikowany dostęp do wszystkich usług
+- 👤 Wspólna autentykacja
+- 📬 Zunifikowana skrzynka odbiorcza
+- 🔔 Centralne powiadomienia
+
+**Porty:** 4000 (API), 4100 (Frontend)
+
+---
+
+### 2. [szyfromat-pl](./szyfromat-pl/) - e-Doręczenia SaaS
+
+**Pełna obsługa e-Doręczeń (szyfromat.pl)**
+
+- 📧 Wysyłanie/odbieranie wiadomości urzędowych
+- ✅ Potwierdzenia odbioru (UPO/UPD)
+- 🔄 CQRS + Event Sourcing
+- 💾 SQLite persistence
+
+**Porty:** 8500 (API), 3500 (Frontend)
+
+---
+
+### 3. [edoreczenia-proxy-imap-smtp](./edoreczenia-proxy-imap-smtp/) - Middleware
 
 **Most między protokołami IMAP/SMTP a REST API e-Doręczeń.**
 
@@ -41,7 +110,7 @@ make up
 
 ---
 
-### 2. [edoreczenia-middleware-sync](./edoreczenia-middleware-sync/)
+### 4. [edoreczenia-middleware-sync](./edoreczenia-middleware-sync/)
 
 **Middleware synchronizujący e-Doręczenia z istniejącą skrzynką IMAP.**
 
@@ -106,9 +175,20 @@ cd edoreczenia-proxy-imap-smtp && make up
 cd edoreczenia-middleware-sync && make up
 ```
 
+## 📖 Dokumentacja
+
+- [founder-pl/docs/ECOSYSTEM.md](https://github.com/founder-pl/founder-pl/blob/main/docs/ECOSYSTEM.md) - Dokumentacja ekosystemu
+- [founder-pl/docs/ARCHITECTURE.md](https://github.com/founder-pl/founder-pl/blob/main/docs/ARCHITECTURE.md) - Architektura techniczna
+- [docs/](docs/) - Dokumentacja techniczna tego repozytorium
+
+## 🔗 Powiązane repozytoria
+
+- [founder-pl/founder-pl](https://github.com/founder-pl/founder-pl) - Dokumentacja ekosystemu + strona www
+- [founder-pl/detax](https://github.com/founder-pl/detax) - Detax.pl - AI Asystent
+
 ## 📄 Licencja
 
-MIT License - zobacz plik [LICENSE](LICENSE)
+Apache 2.0 - zobacz plik [LICENSE](LICENSE)
 
 ## 📚 Zasoby
 

@@ -375,10 +375,10 @@ function DashboardPage() {
   }
   
   const services = [
-    { id: 'edoreczenia', name: 'e-Doręczenia', icon: Mail, color: 'bg-red-500', domain: 'detax.pl' },
+    { id: 'edoreczenia', name: 'e-Doręczenia', icon: Mail, color: 'bg-red-500', domain: 'szyfromat.pl' },
+    { id: 'detax', name: 'Detax AI', icon: FileText, color: 'bg-emerald-500', domain: 'detax.pl' },
     { id: 'epuap', name: 'ePUAP', icon: Building, color: 'bg-blue-500', domain: 'gov.pl' },
-    { id: 'ksef', name: 'KSeF', icon: FileText, color: 'bg-green-500', domain: 'mf.gov.pl' },
-    { id: 'mobywatel', name: 'mObywatel', icon: CreditCard, color: 'bg-purple-500', domain: 'gov.pl' },
+    { id: 'ksef', name: 'KSeF', icon: CreditCard, color: 'bg-green-500', domain: 'mf.gov.pl' },
   ];
   
   return (

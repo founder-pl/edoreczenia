@@ -14,13 +14,13 @@ const entityTypes = [
 ];
 
 const authMethods = [
+  { id: 'oauth2', name: 'OAuth2', description: 'Oficjalne API e-Doręczeń (zalecane)' },
   { id: 'mobywatel', name: 'mObywatel', description: 'Aplikacja mObywatel' },
-  { id: 'certum_signature', name: 'Podpis Certum', description: 'Podpis elektroniczny Certum' },
-  { id: 'qualified_signature', name: 'Podpis kwalifikowany', description: 'Kwalifikowany podpis elektroniczny' },
+  { id: 'certificate', name: 'Certyfikat kwalifikowany', description: 'Certyfikat kwalifikowany (Certum, KIR)' },
 ];
 
 const providers = [
-  { id: 'certum', name: 'Certum', url: 'https://panel.certum.pl/' },
+  { id: 'idcard', name: 'IDCard.pl', url: 'https://idcard.pl/' },
   { id: 'poczta_polska', name: 'Poczta Polska', url: 'https://edoreczenia.poczta-polska.pl/' },
 ];
 
@@ -35,8 +35,8 @@ export default function IntegrationPage() {
   // Form state
   const [formData, setFormData] = useState({
     ade_address: '',
-    provider: 'certum',
-    auth_method: 'mobywatel',
+    provider: 'idcard',
+    auth_method: 'oauth2',
     entity_type: 'person',
     pesel: '',
     nip: '',

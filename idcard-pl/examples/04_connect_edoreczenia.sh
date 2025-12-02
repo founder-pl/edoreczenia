@@ -1,6 +1,6 @@
 #!/bin/bash
 # ═══════════════════════════════════════════════════════════════
-# 04_connect_edoreczenia.sh - Połączenie z e-Doręczenia (detax.pl)
+# 04_connect_edoreczenia.sh - Połączenie z e-Doręczenia (szyfromat.pl)
 # ═══════════════════════════════════════════════════════════════
 
 API_URL="${API_URL:-http://localhost:4000}"
@@ -37,7 +37,7 @@ if [ -z "$ADE_ADDRESS" ]; then
 fi
 
 echo "╔═══════════════════════════════════════════════════════════════╗"
-echo "║  IDCard.pl - Połączenie z e-Doręczenia (detax.pl)            ║"
+echo "║  IDCard.pl - Połączenie z e-Doręczenia (szyfromat.pl)            ║"
 echo "╚═══════════════════════════════════════════════════════════════╝"
 echo ""
 echo "Adres e-Doręczeń: $ADE_ADDRESS"
