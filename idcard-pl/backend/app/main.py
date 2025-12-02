@@ -100,16 +100,29 @@ class UserCreate(BaseModel):
     name: str
     company_name: Optional[str] = None
     nip: Optional[str] = None
+    krs: Optional[str] = None
+    ade_address: Optional[str] = None  # Adres e-Doręczeń (AE:PL-...)
 
 class UserLogin(BaseModel):
     email: str
     password: str
+
+class EmailAlias(BaseModel):
+    """Alias email w domenie @idcard.pl"""
+    alias: str  # np. nip-1234567890@idcard.pl
+    alias_type: str  # nip, krs, ade, company
+    target_email: str  # docelowy email użytkownika
+    active: bool = True
 
 class UserResponse(BaseModel):
     id: str
     email: str
     name: str
     company_name: Optional[str] = None
+    nip: Optional[str] = None
+    krs: Optional[str] = None
+    ade_address: Optional[str] = None
+    email_aliases: List[str] = []  # Lista aliasów @idcard.pl
     created_at: datetime
 
 class ServiceConnection(BaseModel):
@@ -159,17 +172,97 @@ class UnifiedNotification(BaseModel):
 users_db: Dict[str, Dict] = {}
 connections_db: Dict[str, List[ServiceConnection]] = {}
 notifications_db: Dict[str, List[UnifiedNotification]] = []
+email_aliases_db: Dict[str, EmailAlias] = {}  # alias -> EmailAlias
+
+def generate_email_aliases(user_id: str, email: str, nip: str = None, krs: str = None, 
+                           ade_address: str = None, company_name: str = None) -> List[str]:
+    """
+    Generuje aliasy email w domenie @idcard.pl dla identyfikatorów firmy.
+    Każdy alias przekierowuje na główny email użytkownika.
+    """
+    aliases = []
+    
+    # Alias dla NIP: nip-1234567890@idcard.pl
+    if nip:
+        nip_clean = nip.replace("-", "").replace(" ", "")
+        alias = f"nip-{nip_clean}@idcard.pl"
+        email_aliases_db[alias] = EmailAlias(
+            alias=alias,
+            alias_type="nip",
+            target_email=email,
+            active=True
+        )
+        aliases.append(alias)
+    
+    # Alias dla KRS: krs-0000123456@idcard.pl
+    if krs:
+        krs_clean = krs.replace(" ", "")
+        alias = f"krs-{krs_clean}@idcard.pl"
+        email_aliases_db[alias] = EmailAlias(
+            alias=alias,
+            alias_type="krs",
+            target_email=email,
+            active=True
+        )
+        aliases.append(alias)
+    
+    # Alias dla adresu e-Doręczeń: ae-pl-kowalski-12345@idcard.pl
+    if ade_address:
+        # AE:PL-KOWALSKI-96046-01 -> ae-pl-kowalski-96046-01
+        ade_clean = ade_address.lower().replace(":", "-").replace(" ", "")
+        alias = f"{ade_clean}@idcard.pl"
+        email_aliases_db[alias] = EmailAlias(
+            alias=alias,
+            alias_type="ade",
+            target_email=email,
+            active=True
+        )
+        aliases.append(alias)
+    
+    # Alias dla nazwy firmy: firma-nazwa@idcard.pl
+    if company_name:
+        # "Kowalski Sp. z o.o." -> "kowalski-sp-z-oo"
+        import re
+        company_clean = company_name.lower()
+        company_clean = re.sub(r'[^a-z0-9]+', '-', company_clean)
+        company_clean = company_clean.strip('-')
+        if company_clean:
+            alias = f"firma-{company_clean}@idcard.pl"
+            email_aliases_db[alias] = EmailAlias(
+                alias=alias,
+                alias_type="company",
+                target_email=email,
+                active=True
+            )
+            aliases.append(alias)
+    
+    return aliases
 
 # Inicjalizacja demo użytkownika
 def init_demo_user():
     demo_id = "user-demo"
     demo_password_hash = hashlib.sha256(config.DEMO_USER_PASSWORD.encode()).hexdigest()
+    
+    # Generuj aliasy dla demo użytkownika
+    demo_aliases = generate_email_aliases(
+        user_id=demo_id,
+        email=config.DEMO_USER_EMAIL,
+        nip="1234567890",
+        krs="0000123456",
+        ade_address="AE:PL-DEMO-USER-1234-01",
+        company_name=config.DEMO_USER_COMPANY
+    )
+    
     users_db[demo_id] = {
         "id": demo_id,
         "email": config.DEMO_USER_EMAIL,
         "password_hash": demo_password_hash,
         "name": config.DEMO_USER_NAME,
         "company_name": config.DEMO_USER_COMPANY,
+        "nip": "1234567890",
+        "krs": "0000123456",
+        "ade_address": "AE:PL-DEMO-USER-1234-01",
+        "email_aliases": demo_aliases,
         "created_at": datetime.utcnow()
     }
     connections_db[demo_id] = []
@@ -212,13 +305,34 @@ def verify_jwt_token(credentials: HTTPAuthorizationCredentials = Depends(securit
 
 @app.post("/api/auth/register")
 async def register(user: UserCreate):
-    """Rejestracja nowego użytkownika"""
+    """
+    Rejestracja nowego użytkownika.
+    
+    Automatycznie tworzy aliasy email w domenie @idcard.pl dla:
+    - NIP: nip-1234567890@idcard.pl
+    - KRS: krs-0000123456@idcard.pl  
+    - Adres e-Doręczeń: ae-pl-nazwa-12345@idcard.pl
+    - Nazwa firmy: firma-nazwa@idcard.pl
+    
+    Każdy alias przekierowuje na główny email użytkownika.
+    """
     # Sprawdź czy email istnieje
     for u in users_db.values():
         if u["email"] == user.email:
             raise HTTPException(status_code=400, detail="Email już zarejestrowany")
     
     user_id = f"user-{uuid.uuid4().hex[:8]}"
+    
+    # Generuj aliasy email @idcard.pl
+    email_aliases = generate_email_aliases(
+        user_id=user_id,
+        email=user.email,
+        nip=user.nip,
+        krs=user.krs,
+        ade_address=user.ade_address,
+        company_name=user.company_name
+    )
+    
     users_db[user_id] = {
         "id": user_id,
         "email": user.email,
@@ -226,11 +340,37 @@ async def register(user: UserCreate):
         "name": user.name,
         "company_name": user.company_name,
         "nip": user.nip,
-        "created_at": datetime.utcnow()
+        "krs": user.krs,
+        "ade_address": user.ade_address,
+        "email_aliases": email_aliases,
+        "created_at": datetime.utcnow(),
+        # Automatyczna autoryzacja do wszystkich usług
+        "authorized_services": ["szyfromat", "detax", "nextcloud"],
+        # Trial Detax.pl - 3 darmowe zapytania
+        "detax_trial": {
+            "queries_remaining": 3,
+            "queries_used": 0,
+            "trial_started": datetime.utcnow().isoformat(),
+            "subscription_required": False
+        }
     }
     connections_db[user_id] = []
     
     token = create_jwt_token(user_id, user.email)
+    
+    # Automatyczne połączenia z usługami
+    auto_connections = []
+    for service in ["szyfromat", "detax", "nextcloud"]:
+        conn_id = f"conn-{uuid.uuid4().hex[:8]}"
+        connection = ServiceConnection(
+            id=conn_id,
+            service_type=ServiceType.EDORECZENIA if service == "szyfromat" else ServiceType.KSEF,
+            status=ServiceStatus.ACTIVE,
+            external_id=f"{service}-{uuid.uuid4().hex[:8]}",
+            connected_at=datetime.utcnow()
+        )
+        connections_db[user_id].append(connection)
+        auto_connections.append({"service": service, "status": "active"})
     
     return {
         "access_token": token,
@@ -238,8 +378,16 @@ async def register(user: UserCreate):
         "user": {
             "id": user_id,
             "email": user.email,
-            "name": user.name
-        }
+            "name": user.name,
+            "email_aliases": email_aliases,
+            "authorized_services": ["szyfromat", "detax", "nextcloud"]
+        },
+        "auto_connections": auto_connections,
+        "detax_trial": {
+            "queries_remaining": 3,
+            "message": "Masz 3 darmowe zapytania do AI Detax.pl!"
+        },
+        "message": f"Konto utworzone! Masz dostęp do wszystkich usług."
     }
 
 @app.post("/api/auth/login")
@@ -275,7 +423,205 @@ async def get_current_user(token_data: dict = Depends(verify_jwt_token)):
         "email": user["email"],
         "name": user["name"],
         "company_name": user.get("company_name"),
+        "nip": user.get("nip"),
+        "krs": user.get("krs"),
+        "ade_address": user.get("ade_address"),
+        "email_aliases": user.get("email_aliases", []),
         "created_at": user["created_at"].isoformat()
+    }
+
+# ═══════════════════════════════════════════════════════════════
+# EMAIL ALIASES
+# ═══════════════════════════════════════════════════════════════
+
+@app.get("/api/aliases")
+async def get_my_aliases(token_data: dict = Depends(verify_jwt_token)):
+    """Pobierz aliasy email zalogowanego użytkownika"""
+    user_id = token_data["sub"]
+    if user_id not in users_db:
+        raise HTTPException(status_code=404, detail="Użytkownik nie znaleziony")
+    
+    user = users_db[user_id]
+    aliases = user.get("email_aliases", [])
+    
+    # Pobierz szczegóły aliasów
+    alias_details = []
+    for alias in aliases:
+        if alias in email_aliases_db:
+            alias_details.append(email_aliases_db[alias].dict())
+    
+    return {
+        "aliases": alias_details,
+        "count": len(alias_details),
+        "info": "Każdy alias przekierowuje emaile na Twój główny adres"
+    }
+
+@app.get("/api/aliases/lookup/{alias}")
+async def lookup_alias(alias: str):
+    """
+    Wyszukaj użytkownika po aliasie email @idcard.pl.
+    Pozwala na korespondencję używając NIP, KRS, adresu ADE lub nazwy firmy.
+    """
+    # Dodaj domenę jeśli nie ma
+    if "@" not in alias:
+        alias = f"{alias}@idcard.pl"
+    
+    if alias not in email_aliases_db:
+        raise HTTPException(status_code=404, detail="Alias nie znaleziony")
+    
+    alias_data = email_aliases_db[alias]
+    
+    return {
+        "alias": alias,
+        "alias_type": alias_data.alias_type,
+        "active": alias_data.active,
+        "can_receive_email": alias_data.active,
+        "info": f"Wiadomości wysłane na {alias} zostaną dostarczone do właściciela"
+    }
+
+@app.post("/api/aliases/add")
+async def add_alias(
+    alias_type: str,
+    value: str,
+    token_data: dict = Depends(verify_jwt_token)
+):
+    """
+    Dodaj nowy alias email dla użytkownika.
+    
+    alias_type: nip, krs, ade, company
+    value: wartość identyfikatora (np. NIP, KRS, adres ADE)
+    """
+    user_id = token_data["sub"]
+    if user_id not in users_db:
+        raise HTTPException(status_code=404, detail="Użytkownik nie znaleziony")
+    
+    user = users_db[user_id]
+    email = user["email"]
+    
+    # Generuj alias w zależności od typu
+    if alias_type == "nip":
+        new_aliases = generate_email_aliases(user_id, email, nip=value)
+    elif alias_type == "krs":
+        new_aliases = generate_email_aliases(user_id, email, krs=value)
+    elif alias_type == "ade":
+        new_aliases = generate_email_aliases(user_id, email, ade_address=value)
+    elif alias_type == "company":
+        new_aliases = generate_email_aliases(user_id, email, company_name=value)
+    else:
+        raise HTTPException(status_code=400, detail="Nieznany typ aliasu")
+    
+    # Dodaj do użytkownika
+    existing_aliases = user.get("email_aliases", [])
+    user["email_aliases"] = list(set(existing_aliases + new_aliases))
+    
+    return {
+        "added": new_aliases,
+        "all_aliases": user["email_aliases"],
+        "message": f"Dodano alias: {new_aliases[0] if new_aliases else 'brak'}"
+    }
+
+# ═══════════════════════════════════════════════════════════════
+# DETAX TRIAL MANAGEMENT
+# ═══════════════════════════════════════════════════════════════
+
+@app.get("/api/detax/trial")
+async def get_detax_trial(token_data: dict = Depends(verify_jwt_token)):
+    """Sprawdź status trialu Detax.pl"""
+    user_id = token_data["sub"]
+    if user_id not in users_db:
+        raise HTTPException(status_code=404, detail="Użytkownik nie znaleziony")
+    
+    user = users_db[user_id]
+    trial = user.get("detax_trial", {
+        "queries_remaining": 0,
+        "queries_used": 0,
+        "subscription_required": True
+    })
+    
+    return {
+        "trial_active": trial.get("queries_remaining", 0) > 0,
+        "queries_remaining": trial.get("queries_remaining", 0),
+        "queries_used": trial.get("queries_used", 0),
+        "subscription_required": trial.get("subscription_required", True),
+        "subscription_url": "http://localhost:5001/api/shop/plans" if trial.get("subscription_required") else None
+    }
+
+@app.post("/api/detax/use-query")
+async def use_detax_query(token_data: dict = Depends(verify_jwt_token)):
+    """
+    Użyj jednego zapytania z trialu Detax.pl.
+    
+    Zwraca:
+    - allowed: True jeśli można zadać pytanie
+    - queries_remaining: ile zostało zapytań
+    - subscription_required: True jeśli trial wyczerpany
+    """
+    user_id = token_data["sub"]
+    if user_id not in users_db:
+        raise HTTPException(status_code=404, detail="Użytkownik nie znaleziony")
+    
+    user = users_db[user_id]
+    
+    # Sprawdź czy ma aktywną subskrypcję
+    if user.get("detax_subscription_active"):
+        return {
+            "allowed": True,
+            "queries_remaining": "unlimited",
+            "subscription_active": True
+        }
+    
+    # Sprawdź trial
+    trial = user.get("detax_trial", {"queries_remaining": 0, "queries_used": 0})
+    
+    if trial.get("queries_remaining", 0) <= 0:
+        return {
+            "allowed": False,
+            "queries_remaining": 0,
+            "subscription_required": True,
+            "message": "Trial wyczerpany. Kup subskrypcję aby kontynuować.",
+            "subscription_url": "http://localhost:5001/api/shop/plans"
+        }
+    
+    # Użyj zapytania
+    trial["queries_remaining"] -= 1
+    trial["queries_used"] += 1
+    
+    if trial["queries_remaining"] <= 0:
+        trial["subscription_required"] = True
+    
+    user["detax_trial"] = trial
+    
+    return {
+        "allowed": True,
+        "queries_remaining": trial["queries_remaining"],
+        "queries_used": trial["queries_used"],
+        "subscription_required": trial.get("subscription_required", False),
+        "message": f"Pozostało {trial['queries_remaining']} darmowych zapytań" if trial["queries_remaining"] > 0 else "To było ostatnie darmowe zapytanie!"
+    }
+
+@app.post("/api/detax/activate-subscription")
+async def activate_detax_subscription(
+    subscription_id: str,
+    token_data: dict = Depends(verify_jwt_token)
+):
+    """Aktywuj subskrypcję Detax.pl po płatności"""
+    user_id = token_data["sub"]
+    if user_id not in users_db:
+        raise HTTPException(status_code=404, detail="Użytkownik nie znaleziony")
+    
+    user = users_db[user_id]
+    user["detax_subscription_active"] = True
+    user["detax_subscription_id"] = subscription_id
+    user["detax_subscription_activated"] = datetime.utcnow().isoformat()
+    
+    # Wyłącz trial
+    if "detax_trial" in user:
+        user["detax_trial"]["subscription_required"] = False
+    
+    return {
+        "status": "active",
+        "subscription_id": subscription_id,
+        "message": "Subskrypcja Detax.pl aktywna! Nielimitowane zapytania."
     }
 
 # ═══════════════════════════════════════════════════════════════

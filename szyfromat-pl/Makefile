@@ -2,6 +2,18 @@
 .PHONY: all-up all-down all-status proxy-up sync-up dsl-up
 .PHONY: cli-login cli-inbox cli-send cli-read cli-folders cli-status
 
+# Załaduj zmienne z .env
+include .env
+export
+
+# Domyślne wartości (jeśli nie ma w .env)
+BACKEND_PORT ?= 8500
+FRONTEND_PORT ?= 3500
+NEXTCLOUD_PORT ?= 8090
+SZYFROMAT_DOMAIN ?= localhost
+NEXTCLOUD_USER ?= admin
+NEXTCLOUD_PASSWORD ?= admin
+
 # Domyślny cel
 help:
 	@echo "═══════════════════════════════════════════════════════════════"
@@ -16,10 +28,11 @@ help:
 	@echo ""
 	@echo "Komendy Docker:"
 	@echo "  make build      - Buduje obrazy Docker"
-	@echo "  make up         - Uruchamia kontenery"
-	@echo "  make down       - Zatrzymuje kontenery"
-	@echo "  make logs       - Pokazuje logi"
-	@echo "  make status     - Status kontenerów"
+	@echo "  make up         - Uruchamia Szyfromat + Nextcloud"
+	@echo "  make down       - Zatrzymuje Szyfromat + Nextcloud"
+	@echo "  make logs       - Pokazuje logi Szyfromat"
+	@echo "  make logs-nextcloud - Pokazuje logi Nextcloud"
+	@echo "  make status     - Status wszystkich kontenerów"
 	@echo "  make clean      - Czyści zasoby Docker"
 	@echo ""
 	@echo "Komendy wszystkich usług:"
@@ -36,11 +49,13 @@ help:
 	@echo "  make cli-status - Status integracji"
 	@echo ""
 	@echo "Dane dostępowe:"
-	@echo "  Panel SaaS:    http://localhost:3500"
-	@echo "  Przewodnik:    http://localhost:3500/guide"
-	@echo "  Backend API:   http://localhost:8500/docs"
-	@echo "  Login:         testuser / testpass123"
-	@echo "                 mailuser / mailpass123"
+	@echo "  Panel SaaS:    http://$(SZYFROMAT_DOMAIN):$(FRONTEND_PORT)"
+	@echo "  Przewodnik:    http://$(SZYFROMAT_DOMAIN):$(FRONTEND_PORT)/guide"
+	@echo "  Backend API:   http://$(SZYFROMAT_DOMAIN):$(BACKEND_PORT)/docs"
+	@echo "  Nextcloud:     http://$(SZYFROMAT_DOMAIN):$(NEXTCLOUD_PORT)"
+	@echo ""
+	@echo "  Login:         $(DEMO_USER_EMAIL) / $(DEMO_USER_PASSWORD)"
+	@echo "  Nextcloud:     $(NEXTCLOUD_USER) / $(NEXTCLOUD_PASSWORD)"
 
 # Instalacja zależności
 install:
@@ -52,12 +67,12 @@ install:
 # Tryb developerski
 dev:
 	@echo "🚀 Uruchamianie w trybie developerskim..."
-	@echo "Backend: http://localhost:8000"
-	@echo "Frontend: http://localhost:3000"
+	@echo "Backend: http://$(SZYFROMAT_DOMAIN):$(BACKEND_PORT)"
+	@echo "Frontend: http://$(SZYFROMAT_DOMAIN):$(FRONTEND_PORT)"
 	@make -j2 dev-backend dev-frontend
 
 dev-backend:
-	cd backend && uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
+	cd backend && uvicorn app.main:app --reload --host 0.0.0.0 --port $(BACKEND_PORT)
 
 dev-frontend:
 	cd frontend && npm run dev
@@ -65,33 +80,47 @@ dev-frontend:
 # Docker
 build:
 	docker-compose build
+	cd nextcloud && docker-compose build
 
 up:
-	docker-compose up --build -d
+	docker-compose up -d --build
+	cd nextcloud && docker-compose up -d --build
 	@echo ""
 	@echo "═══════════════════════════════════════════════════════════════"
-	@echo "  e-Doręczenia SaaS uruchomiony!"
+	@echo "  Szyfromat.pl + Nextcloud uruchomiony!"
 	@echo "═══════════════════════════════════════════════════════════════"
 	@echo ""
-	@echo "  Panel:      http://localhost:3500"
-	@echo "  Przewodnik: http://localhost:3500/guide"
-	@echo "  API Docs:   http://localhost:8500/docs"
+	@echo "  Panel:      http://$(SZYFROMAT_DOMAIN):$(FRONTEND_PORT)"
+	@echo "  Przewodnik: http://$(SZYFROMAT_DOMAIN):$(FRONTEND_PORT)/guide"
+	@echo "  API Docs:   http://$(SZYFROMAT_DOMAIN):$(BACKEND_PORT)/docs"
+	@echo "  Nextcloud:  http://$(SZYFROMAT_DOMAIN):$(NEXTCLOUD_PORT)"
 	@echo ""
-	@echo "  Login:      testuser / testpass123"
-	@echo "              mailuser / mailpass123"
+	@echo "  Login:      $(DEMO_USER_EMAIL) / $(DEMO_USER_PASSWORD)"
+	@echo "  Nextcloud:  $(NEXTCLOUD_USER) / $(NEXTCLOUD_PASSWORD)"
 	@echo ""
 
 down:
 	docker-compose down
+	cd nextcloud && docker-compose down
 
 logs:
 	docker-compose logs -f
 
+logs-nextcloud:
+	cd nextcloud && docker-compose logs -f
+
 status:
-	docker-compose ps
+	@echo "═══════════════════════════════════════════════════════════════"
+	@echo "  Szyfromat.pl Status"
+	@echo "═══════════════════════════════════════════════════════════════"
+	@docker-compose ps
+	@echo ""
+	@echo "  Nextcloud:"
+	@cd nextcloud && docker-compose ps
 
 clean:
 	docker-compose down -v --rmi local
+	cd nextcloud && docker-compose down -v --rmi local
 	rm -rf frontend/node_modules frontend/dist
 	rm -rf backend/__pycache__
 
@@ -154,7 +183,7 @@ up-detached:
 # ═══════════════════════════════════════════════════════════════
 
 cli-login:
-	@python3 cli/edoreczenia-cli.py login -u testuser -p testpass123
+	@python3 cli/edoreczenia-cli.py login -u $(DEMO_USER_EMAIL) -p $(DEMO_USER_PASSWORD)
 
 cli-inbox:
 	@python3 cli/edoreczenia-cli.py inbox

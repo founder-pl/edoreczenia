@@ -1,5 +1,16 @@
 .PHONY: build up down logs test clean help status dev install
 
+# Załaduj zmienne z .env
+include .env
+export
+
+# Domyślne wartości (jeśli nie ma w .env)
+BACKEND_PORT ?= 4000
+FRONTEND_PORT ?= 4100
+IDCARD_DOMAIN ?= localhost
+DEMO_USER_EMAIL ?= demo@idcard.pl
+DEMO_USER_PASSWORD ?= demo123
+
 # ═══════════════════════════════════════════════════════════════
 # POMOC
 # ═══════════════════════════════════════════════════════════════
@@ -34,13 +45,13 @@ help:
 	@echo "  make cli-inbox    - Pokaż skrzynkę"
 	@echo ""
 	@echo "Dostęp:"
-	@echo "  Frontend:  http://localhost:4100"
-	@echo "  API:       http://localhost:4000"
-	@echo "  API Docs:  http://localhost:4000/docs"
+	@echo "  Frontend:  http://$(IDCARD_DOMAIN):$(FRONTEND_PORT)"
+	@echo "  API:       http://$(IDCARD_DOMAIN):$(BACKEND_PORT)"
+	@echo "  API Docs:  http://$(IDCARD_DOMAIN):$(BACKEND_PORT)/docs"
 	@echo ""
 	@echo "Demo konto:"
-	@echo "  Email:    demo@idcard.pl"
-	@echo "  Hasło:    demo123"
+	@echo "  Email:    $(DEMO_USER_EMAIL)"
+	@echo "  Hasło:    $(DEMO_USER_PASSWORD)"
 
 # ═══════════════════════════════════════════════════════════════
 # INSTALACJA
@@ -58,15 +69,15 @@ install:
 
 dev:
 	@echo "🚀 Uruchamianie w trybie developerskim..."
-	@echo "Backend: http://localhost:4000"
-	@echo "Frontend: http://localhost:4100"
+	@echo "Backend: http://$(IDCARD_DOMAIN):$(BACKEND_PORT)"
+	@echo "Frontend: http://$(IDCARD_DOMAIN):$(FRONTEND_PORT)"
 	@make -j2 dev-backend dev-frontend
 
 dev-backend:
-	cd backend && uvicorn app.main:app --reload --host 0.0.0.0 --port 4000
+	cd backend && uvicorn app.main:app --reload --host 0.0.0.0 --port $(BACKEND_PORT)
 
 dev-frontend:
-	cd frontend && npm run dev -- --port 4100
+	cd frontend && npm run dev -- --port $(FRONTEND_PORT)
 
 # ═══════════════════════════════════════════════════════════════
 # DOCKER
@@ -82,11 +93,11 @@ up:
 	@echo "  IDCard.pl uruchomiony!"
 	@echo "═══════════════════════════════════════════════════════════════"
 	@echo ""
-	@echo "  Frontend:  http://localhost:4100"
-	@echo "  API:       http://localhost:4000"
-	@echo "  API Docs:  http://localhost:4000/docs"
+	@echo "  Frontend:  http://$(IDCARD_DOMAIN):$(FRONTEND_PORT)"
+	@echo "  API:       http://$(IDCARD_DOMAIN):$(BACKEND_PORT)"
+	@echo "  API Docs:  http://$(IDCARD_DOMAIN):$(BACKEND_PORT)/docs"
 	@echo ""
-	@echo "  Demo:      demo@idcard.pl / demo123"
+	@echo "  Demo:      $(DEMO_USER_EMAIL) / $(DEMO_USER_PASSWORD)"
 	@echo ""
 
 down:
@@ -115,12 +126,12 @@ test-api:
 	@echo "🧪 Testowanie API..."
 	@echo ""
 	@echo "1. Health check:"
-	@curl -s http://localhost:4000/health | python3 -m json.tool
+	@curl -s http://$(IDCARD_DOMAIN):$(BACKEND_PORT)/health | python3 -m json.tool
 	@echo ""
 	@echo "2. Login (demo):"
-	@curl -s -X POST http://localhost:4000/api/auth/login \
+	@curl -s -X POST http://$(IDCARD_DOMAIN):$(BACKEND_PORT)/api/auth/login \
 		-H "Content-Type: application/json" \
-		-d '{"email":"demo@idcard.pl","password":"demo123"}' | python3 -m json.tool
+		-d '{"email":"$(DEMO_USER_EMAIL)","password":"$(DEMO_USER_PASSWORD)"}' | python3 -m json.tool
 	@echo ""
 
 # ═══════════════════════════════════════════════════════════════
@@ -128,7 +139,7 @@ test-api:
 # ═══════════════════════════════════════════════════════════════
 
 cli-login:
-	@./cli/idcard login -u demo@idcard.pl -p demo123
+	@./cli/idcard login -u $(DEMO_USER_EMAIL) -p $(DEMO_USER_PASSWORD)
 
 cli-register:
 	@./cli/idcard register
