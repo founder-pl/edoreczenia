@@ -1,0 +1,172 @@
+version: '3.8'
+
+services:
+  # ===========================================
+  # Symulator API e-Doręczeń
+  # ===========================================
+  edoreczenia-simulator:
+    build:
+      context: ./simulator
+      dockerfile: Dockerfile
+    container_name: edoreczenia-simulator
+    ports:
+      - "8080:8080"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - edoreczenia-net
+    restart: unless-stopped
+
+  # ===========================================
+  # Lokalny serwer IMAP (Dovecot)
+  # ===========================================
+  dovecot:
+    build:
+      context: ./dovecot
+      dockerfile: Dockerfile
+    container_name: edoreczenia-dovecot
+    ports:
+      - "1143:143"    # IMAP
+    healthcheck:
+      test: ["CMD-SHELL", "nc -z localhost 143 || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    volumes:
+      - maildir-data:/home/mailuser/Maildir
+    networks:
+      - edoreczenia-net
+    restart: unless-stopped
+
+  # ===========================================
+  # Middleware Sync
+  # ===========================================
+  edoreczenia-sync:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: edoreczenia-sync
+    environment:
+      # API e-Doręczeń (symulator)
+      - EDORECZENIA_CLIENT_ID=test_client_id
+      - EDORECZENIA_CLIENT_SECRET=test_client_secret
+      - EDORECZENIA_TOKEN_URL=http://edoreczenia-simulator:8080/oauth/token
+      - EDORECZENIA_API_BASE_URL=http://edoreczenia-simulator:8080/ua/v5
+      - EDORECZENIA_ADDRESS=AE:PL-12345-67890-ABCDE-12
+      # Lokalny serwer IMAP
+      - TARGET_IMAP_HOST=dovecot
+      - TARGET_IMAP_PORT=143
+      - TARGET_IMAP_SSL=false
+      - TARGET_IMAP_USERNAME=mailuser
+      - TARGET_IMAP_PASSWORD=mailpass123
+      # Lokalny serwer SMTP (używamy Dovecot LMTP)
+      - TARGET_SMTP_HOST=dovecot
+      - TARGET_SMTP_PORT=24
+      - TARGET_SMTP_SSL=false
+      - TARGET_SMTP_USERNAME=mailuser
+      - TARGET_SMTP_PASSWORD=mailpass123
+      # Synchronizacja
+      - SYNC_INTERVAL_MINUTES=1
+      - SYNC_BATCH_SIZE=50
+      - SYNC_DIRECTION=bidirectional
+      # Foldery
+      - FOLDER_MAPPING_INBOX=INBOX.e-Doreczenia
+      - FOLDER_MAPPING_SENT=Sent.e-Doreczenia
+      - FOLDER_MAPPING_OUTBOX=e-Doreczenia-Wyslij
+      # Baza danych
+      - DATABASE_URL=sqlite:///data/sync_state.db
+      # Logowanie
+      - LOG_LEVEL=DEBUG
+      - LOG_FORMAT=text
+      - DEBUG=true
+    volumes:
+      - sync-data:/app/data
+    depends_on:
+      edoreczenia-simulator:
+        condition: service_healthy
+      dovecot:
+        condition: service_healthy
+    networks:
+      - edoreczenia-net
+    restart: unless-stopped
+
+  # ===========================================
+  # Webmail Client (Roundcube)
+  # ===========================================
+  webmail:
+    image: roundcube/roundcubemail:latest
+    container_name: edoreczenia-webmail
+    ports:
+      - "9000:80"
+    environment:
+      - ROUNDCUBEMAIL_DEFAULT_HOST=dovecot
+      - ROUNDCUBEMAIL_DEFAULT_PORT=143
+      - ROUNDCUBEMAIL_SMTP_SERVER=dovecot
+      - ROUNDCUBEMAIL_SMTP_PORT=24
+      - ROUNDCUBEMAIL_PLUGINS=archive,zipdownload
+    depends_on:
+      dovecot:
+        condition: service_healthy
+    networks:
+      - edoreczenia-net
+    restart: unless-stopped
+
+  # ===========================================
+  # Adminer - Database viewer
+  # ===========================================
+  adminer:
+    image: adminer:latest
+    container_name: edoreczenia-adminer
+    ports:
+      - "9001:8080"
+    networks:
+      - edoreczenia-net
+    profiles:
+      - debug
+
+  # ===========================================
+  # Test Runner
+  # ===========================================
+  tests:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: edoreczenia-sync-tests
+    command: pytest tests/ -v --tb=short
+    environment:
+      - EDORECZENIA_CLIENT_ID=test_client_id
+      - EDORECZENIA_CLIENT_SECRET=test_client_secret
+      - EDORECZENIA_TOKEN_URL=http://edoreczenia-simulator:8080/oauth/token
+      - EDORECZENIA_API_BASE_URL=http://edoreczenia-simulator:8080/ua/v5
+      - EDORECZENIA_ADDRESS=AE:PL-12345-67890-ABCDE-12
+      - TARGET_IMAP_HOST=dovecot
+      - TARGET_IMAP_PORT=143
+      - TARGET_IMAP_SSL=false
+      - TARGET_IMAP_USERNAME=mailuser
+      - TARGET_IMAP_PASSWORD=mailpass123
+      - TARGET_SMTP_HOST=dovecot
+      - TARGET_SMTP_PORT=24
+      - TARGET_SMTP_SSL=false
+      - TARGET_SMTP_USERNAME=mailuser
+      - TARGET_SMTP_PASSWORD=mailpass123
+      - DATABASE_URL=sqlite:///:memory:
+    depends_on:
+      edoreczenia-simulator:
+        condition: service_healthy
+      dovecot:
+        condition: service_healthy
+    networks:
+      - edoreczenia-net
+    profiles:
+      - test
+
+networks:
+  edoreczenia-net:
+    driver: bridge
+
+volumes:
+  maildir-data:
+  sync-data:

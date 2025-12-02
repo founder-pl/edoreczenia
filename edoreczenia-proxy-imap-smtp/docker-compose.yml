@@ -1,0 +1,105 @@
+version: '3.8'
+
+services:
+  # ===========================================
+  # Symulator API e-Doręczeń
+  # ===========================================
+  edoreczenia-simulator:
+    build:
+      context: ./simulator
+      dockerfile: Dockerfile
+    container_name: edoreczenia-simulator
+    ports:
+      - "8080:8080"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - edoreczenia-net
+    restart: unless-stopped
+
+  # ===========================================
+  # Proxy IMAP/SMTP
+  # ===========================================
+  edoreczenia-proxy:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: edoreczenia-proxy
+    ports:
+      - "1143:1143"   # IMAP
+      - "1025:1025"   # SMTP
+    environment:
+      - EDORECZENIA_CLIENT_ID=test_client_id
+      - EDORECZENIA_CLIENT_SECRET=test_client_secret
+      - EDORECZENIA_TOKEN_URL=http://edoreczenia-simulator:8080/oauth/token
+      - EDORECZENIA_API_BASE_URL=http://edoreczenia-simulator:8080/ua/v5
+      - EDORECZENIA_ADDRESS=AE:PL-12345-67890-ABCDE-12
+      - LOCAL_AUTH_USERNAME=testuser
+      - LOCAL_AUTH_PASSWORD=testpass123
+      - IMAP_HOST=0.0.0.0
+      - IMAP_PORT=1143
+      - SMTP_HOST=0.0.0.0
+      - SMTP_PORT=1025
+      - LOG_LEVEL=DEBUG
+      - LOG_FORMAT=text
+      - DEBUG=true
+    depends_on:
+      edoreczenia-simulator:
+        condition: service_healthy
+    networks:
+      - edoreczenia-net
+    restart: unless-stopped
+
+  # ===========================================
+  # Webmail Client (opcjonalny - Roundcube)
+  # ===========================================
+  webmail:
+    image: roundcube/roundcubemail:latest
+    container_name: edoreczenia-webmail
+    ports:
+      - "9000:80"
+    environment:
+      - ROUNDCUBEMAIL_DEFAULT_HOST=edoreczenia-proxy
+      - ROUNDCUBEMAIL_DEFAULT_PORT=1143
+      - ROUNDCUBEMAIL_SMTP_SERVER=edoreczenia-proxy
+      - ROUNDCUBEMAIL_SMTP_PORT=1025
+      - ROUNDCUBEMAIL_PLUGINS=archive,zipdownload
+    depends_on:
+      - edoreczenia-proxy
+    networks:
+      - edoreczenia-net
+    restart: unless-stopped
+
+  # ===========================================
+  # Test Runner
+  # ===========================================
+  tests:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: edoreczenia-proxy-tests
+    command: pytest tests/ -v --tb=short
+    environment:
+      - EDORECZENIA_CLIENT_ID=test_client_id
+      - EDORECZENIA_CLIENT_SECRET=test_client_secret
+      - EDORECZENIA_TOKEN_URL=http://edoreczenia-simulator:8080/oauth/token
+      - EDORECZENIA_API_BASE_URL=http://edoreczenia-simulator:8080/ua/v5
+      - EDORECZENIA_ADDRESS=AE:PL-12345-67890-ABCDE-12
+      - LOCAL_AUTH_PASSWORD=testpass123
+    depends_on:
+      edoreczenia-simulator:
+        condition: service_healthy
+    networks:
+      - edoreczenia-net
+    profiles:
+      - test
+
+networks:
+  edoreczenia-net:
+    driver: bridge
+
+volumes:
+  webmail-data:
