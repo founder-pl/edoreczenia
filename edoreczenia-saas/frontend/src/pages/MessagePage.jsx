@@ -37,8 +37,48 @@ export default function MessagePage() {
         navigate('/inbox');
       } catch (error) {
         console.error('Error deleting message:', error);
+        alert('Błąd podczas usuwania wiadomości');
       }
     }
+  };
+
+  const handleArchive = async () => {
+    try {
+      await messagesApi.archive(id);
+      navigate('/archive');
+    } catch (error) {
+      console.error('Error archiving message:', error);
+      alert('Błąd podczas archiwizacji wiadomości');
+    }
+  };
+
+  const handleReply = () => {
+    navigate('/compose', { 
+      state: { 
+        replyTo: message,
+        subject: `Re: ${message.subject}`,
+        recipient: message.sender?.address
+      }
+    });
+  };
+
+  const handleForward = () => {
+    navigate('/compose', { 
+      state: { 
+        forward: message,
+        subject: `Fwd: ${message.subject}`,
+        content: `\n\n---------- Przekazana wiadomość ----------\nOd: ${message.sender?.name} <${message.sender?.address}>\nData: ${message.receivedAt}\nTemat: ${message.subject}\n\n${message.content}`
+      }
+    });
+  };
+
+  const handlePrint = () => {
+    window.print();
+  };
+
+  const handleDownloadAttachment = (attachment) => {
+    // W demo trybie - symulacja pobierania
+    alert(`Pobieranie: ${attachment.filename}\nW trybie produkcyjnym plik zostałby pobrany z serwera.`);
   };
 
   if (loading) {
@@ -73,13 +113,25 @@ export default function MessagePage() {
             <ArrowLeft size={20} />
           </button>
           <span className="text-gray-400">|</span>
-          <button className="p-2 hover:bg-gray-100 rounded-lg transition-colors" title="Odpowiedz">
+          <button 
+            onClick={handleReply}
+            className="p-2 hover:bg-gray-100 rounded-lg transition-colors" 
+            title="Odpowiedz"
+          >
             <Reply size={20} />
           </button>
-          <button className="p-2 hover:bg-gray-100 rounded-lg transition-colors" title="Przekaż">
+          <button 
+            onClick={handleForward}
+            className="p-2 hover:bg-gray-100 rounded-lg transition-colors" 
+            title="Przekaż"
+          >
             <Forward size={20} />
           </button>
-          <button className="p-2 hover:bg-gray-100 rounded-lg transition-colors" title="Archiwizuj">
+          <button 
+            onClick={handleArchive}
+            className="p-2 hover:bg-gray-100 rounded-lg transition-colors" 
+            title="Archiwizuj"
+          >
             <Archive size={20} />
           </button>
           <button 
@@ -92,7 +144,11 @@ export default function MessagePage() {
         </div>
 
         <div className="flex items-center gap-2">
-          <button className="p-2 hover:bg-gray-100 rounded-lg transition-colors" title="Drukuj">
+          <button 
+            onClick={handlePrint}
+            className="p-2 hover:bg-gray-100 rounded-lg transition-colors" 
+            title="Drukuj"
+          >
             <Printer size={20} />
           </button>
         </div>
@@ -177,7 +233,11 @@ export default function MessagePage() {
                         {attachment.contentType} • {Math.round(attachment.size / 1024)} KB
                       </div>
                     </div>
-                    <button className="p-2 hover:bg-white rounded-lg opacity-0 group-hover:opacity-100 transition-opacity">
+                    <button 
+                      onClick={() => handleDownloadAttachment(attachment)}
+                      className="p-2 hover:bg-white rounded-lg opacity-0 group-hover:opacity-100 transition-opacity"
+                      title="Pobierz"
+                    >
                       <Download size={18} className="text-gray-500" />
                     </button>
                   </div>

@@ -1,5 +1,5 @@
-import { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useState, useEffect } from 'react';
+import { useNavigate, useLocation } from 'react-router-dom';
 import { messagesApi } from '../services/api.jsx';
 import { 
   Send, Paperclip, X, ArrowLeft, Save, Trash2,
@@ -8,6 +8,7 @@ import {
 
 export default function ComposePage() {
   const navigate = useNavigate();
+  const location = useLocation();
   const [recipient, setRecipient] = useState('');
   const [subject, setSubject] = useState('');
   const [content, setContent] = useState('');
@@ -15,6 +16,21 @@ export default function ComposePage() {
   const [sending, setSending] = useState(false);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState(false);
+
+  // Obsługa Reply i Forward z przekazanego state
+  useEffect(() => {
+    if (location.state) {
+      if (location.state.recipient) {
+        setRecipient(location.state.recipient);
+      }
+      if (location.state.subject) {
+        setSubject(location.state.subject);
+      }
+      if (location.state.content) {
+        setContent(location.state.content);
+      }
+    }
+  }, [location.state]);
 
   const handleSubmit = async (e) => {
     e.preventDefault();

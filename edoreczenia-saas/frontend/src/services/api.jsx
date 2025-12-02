@@ -53,6 +53,15 @@ export const messagesApi = {
   
   delete: (id) =>
     api.delete(`/api/messages/${id}`),
+  
+  archive: (id) =>
+    api.post(`/api/messages/${id}/archive`),
+  
+  move: (id, folder) =>
+    api.post(`/api/messages/${id}/move`, { folder }),
+  
+  markAsRead: (id) =>
+    api.post(`/api/messages/${id}/read`),
 };
 
 // Folders

@@ -1,17 +1,18 @@
 import { Outlet, Link, useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../hooks/useAuth.jsx';
+import { foldersApi } from '../services/api.jsx';
 import { 
   Inbox, Send, FileText, Trash2, Archive, Settings, 
   LogOut, Menu, X, PenSquare, Mail, User, Bell, BookOpen
 } from 'lucide-react';
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 
-const navigation = [
-  { name: 'Odebrane', href: '/inbox', icon: Inbox, badge: 2 },
-  { name: 'Wysłane', href: '/sent', icon: Send },
-  { name: 'Robocze', href: '/drafts', icon: FileText },
-  { name: 'Kosz', href: '/trash', icon: Trash2 },
-  { name: 'Archiwum', href: '/archive', icon: Archive },
+const navigationConfig = [
+  { name: 'Odebrane', href: '/inbox', icon: Inbox, folderId: 'inbox' },
+  { name: 'Wysłane', href: '/sent', icon: Send, folderId: 'sent' },
+  { name: 'Robocze', href: '/drafts', icon: FileText, folderId: 'drafts' },
+  { name: 'Kosz', href: '/trash', icon: Trash2, folderId: 'trash' },
+  { name: 'Archiwum', href: '/archive', icon: Archive, folderId: 'archive' },
 ];
 
 export default function Layout() {
@@ -19,6 +20,24 @@ export default function Layout() {
   const location = useLocation();
   const navigate = useNavigate();
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [folderCounts, setFolderCounts] = useState({});
+
+  useEffect(() => {
+    loadFolderCounts();
+  }, []);
+
+  const loadFolderCounts = async () => {
+    try {
+      const response = await foldersApi.getAll();
+      const counts = {};
+      response.data.forEach(folder => {
+        counts[folder.id] = folder.unread_count || 0;
+      });
+      setFolderCounts(counts);
+    } catch (error) {
+      console.error('Error loading folder counts:', error);
+    }
+  };
 
   const handleLogout = () => {
     logout();
@@ -106,8 +125,9 @@ export default function Layout() {
 
             {/* Navigation */}
             <nav className="space-y-1">
-              {navigation.map((item) => {
+              {navigationConfig.map((item) => {
                 const isActive = location.pathname === item.href;
+                const unreadCount = folderCounts[item.folderId] || 0;
                 return (
                   <Link
                     key={item.name}
@@ -123,9 +143,9 @@ export default function Layout() {
                   >
                     <item.icon size={20} />
                     <span className="flex-1">{item.name}</span>
-                    {item.badge && (
+                    {unreadCount > 0 && (
                       <span className="bg-pp-red text-white text-xs px-2 py-0.5 rounded-full">
-                        {item.badge}
+                        {unreadCount}
                       </span>
                     )}
                   </Link>

@@ -78,6 +78,30 @@ export default function InboxPage({ folder = 'inbox' }) {
     }
   };
 
+  const handleBulkArchive = async () => {
+    try {
+      await Promise.all(selectedMessages.map(id => messagesApi.archive(id)));
+      setSelectedMessages([]);
+      loadMessages();
+    } catch (error) {
+      console.error('Error archiving messages:', error);
+      alert('Błąd podczas archiwizacji wiadomości');
+    }
+  };
+
+  const handleBulkDelete = async () => {
+    if (confirm(`Czy na pewno chcesz usunąć ${selectedMessages.length} wiadomości?`)) {
+      try {
+        await Promise.all(selectedMessages.map(id => messagesApi.delete(id)));
+        setSelectedMessages([]);
+        loadMessages();
+      } catch (error) {
+        console.error('Error deleting messages:', error);
+        alert('Błąd podczas usuwania wiadomości');
+      }
+    }
+  };
+
   return (
     <div className="h-full flex flex-col">
       {/* Toolbar */}
@@ -102,10 +126,18 @@ export default function InboxPage({ folder = 'inbox' }) {
           
           {selectedMessages.length > 0 && (
             <>
-              <button className="p-2 hover:bg-gray-100 rounded-lg transition-colors" title="Archiwizuj">
+              <button 
+                onClick={handleBulkArchive}
+                className="p-2 hover:bg-gray-100 rounded-lg transition-colors" 
+                title="Archiwizuj zaznaczone"
+              >
                 <Archive size={20} />
               </button>
-              <button className="p-2 hover:bg-gray-100 rounded-lg transition-colors text-red-500" title="Usuń">
+              <button 
+                onClick={handleBulkDelete}
+                className="p-2 hover:bg-gray-100 rounded-lg transition-colors text-red-500" 
+                title="Usuń zaznaczone"
+              >
                 <Trash2 size={20} />
               </button>
             </>

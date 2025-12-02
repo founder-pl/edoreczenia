@@ -502,6 +502,22 @@ async def delete_message(message_id: str, token_data: dict = Depends(verify_jwt_
     """Usuń wiadomość (przenieś do kosza)"""
     return {"status": "deleted", "messageId": message_id}
 
+@app.post("/api/messages/{message_id}/archive")
+async def archive_message(message_id: str, token_data: dict = Depends(verify_jwt_token)):
+    """Przenieś wiadomość do archiwum"""
+    return {"status": "archived", "messageId": message_id, "folder": "archive"}
+
+@app.post("/api/messages/{message_id}/move")
+async def move_message(message_id: str, data: dict, token_data: dict = Depends(verify_jwt_token)):
+    """Przenieś wiadomość do innego folderu"""
+    folder = data.get("folder", "inbox")
+    return {"status": "moved", "messageId": message_id, "folder": folder}
+
+@app.post("/api/messages/{message_id}/read")
+async def mark_as_read(message_id: str, token_data: dict = Depends(verify_jwt_token)):
+    """Oznacz wiadomość jako przeczytaną"""
+    return {"status": "read", "messageId": message_id}
+
 # ═══════════════════════════════════════════════════════════════
 # FOLDERS ENDPOINTS
 # ═══════════════════════════════════════════════════════════════
