@@ -31,13 +31,19 @@ class Config:
     JWT_ALGORITHM = "HS256"
     JWT_EXPIRATION_HOURS = 24
     
+    # Demo user (development)
+    DEMO_USER_EMAIL = os.getenv("DEMO_USER_EMAIL", "demo@idcard.pl")
+    DEMO_USER_PASSWORD = os.getenv("DEMO_USER_PASSWORD", "demo123")
+    DEMO_USER_NAME = os.getenv("DEMO_USER_NAME", "Demo User")
+    DEMO_USER_COMPANY = os.getenv("DEMO_USER_COMPANY", "Demo Company Sp. z o.o.")
+    
     # External services - Szyfromat.pl (e-Doręczenia SaaS)
     SZYFROMAT_API_URL = os.getenv("SZYFROMAT_API_URL", "http://localhost:8500")
     SZYFROMAT_CLIENT_ID = os.getenv("SZYFROMAT_CLIENT_ID", "idcard_client")
     SZYFROMAT_CLIENT_SECRET = os.getenv("SZYFROMAT_CLIENT_SECRET", "idcard_secret")
     
     # Detax.pl (AI Asystent)
-    DETAX_API_URL = os.getenv("DETAX_API_URL", "http://localhost:8000")
+    DETAX_API_URL = os.getenv("DETAX_API_URL", "http://localhost:8005")
     
     # Przyszłe integracje
     EPUAP_API_URL = os.getenv("EPUAP_API_URL", "https://epuap.gov.pl/api")
@@ -153,6 +159,22 @@ class UnifiedNotification(BaseModel):
 users_db: Dict[str, Dict] = {}
 connections_db: Dict[str, List[ServiceConnection]] = {}
 notifications_db: Dict[str, List[UnifiedNotification]] = []
+
+# Inicjalizacja demo użytkownika
+def init_demo_user():
+    demo_id = "user-demo"
+    demo_password_hash = hashlib.sha256(config.DEMO_USER_PASSWORD.encode()).hexdigest()
+    users_db[demo_id] = {
+        "id": demo_id,
+        "email": config.DEMO_USER_EMAIL,
+        "password_hash": demo_password_hash,
+        "name": config.DEMO_USER_NAME,
+        "company_name": config.DEMO_USER_COMPANY,
+        "created_at": datetime.utcnow()
+    }
+    connections_db[demo_id] = []
+
+init_demo_user()
 
 # ═══════════════════════════════════════════════════════════════
 # AUTH HELPERS
