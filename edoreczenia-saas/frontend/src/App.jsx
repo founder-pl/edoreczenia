@@ -40,11 +40,11 @@ function AppRoutes() {
         }
       >
         <Route index element={<Navigate to="/inbox" replace />} />
-        <Route path="inbox" element={<InboxPage folder="inbox" />} />
-        <Route path="sent" element={<InboxPage folder="sent" />} />
-        <Route path="drafts" element={<InboxPage folder="drafts" />} />
-        <Route path="trash" element={<InboxPage folder="trash" />} />
-        <Route path="archive" element={<InboxPage folder="archive" />} />
+        <Route path="inbox" element={<InboxPage key="inbox" folder="inbox" />} />
+        <Route path="sent" element={<InboxPage key="sent" folder="sent" />} />
+        <Route path="drafts" element={<InboxPage key="drafts" folder="drafts" />} />
+        <Route path="trash" element={<InboxPage key="trash" folder="trash" />} />
+        <Route path="archive" element={<InboxPage key="archive" folder="archive" />} />
         <Route path="message/:id" element={<MessagePage />} />
         <Route path="compose" element={<ComposePage />} />
         <Route path="settings" element={<SettingsPage />} />

@@ -1,0 +1,23 @@
+#!/bin/bash
+#
+# e-Doręczenia SaaS CLI - Shell Wrapper
+# Użycie: edoreczenia <komenda> [opcje]
+#
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+CLI_SCRIPT="$SCRIPT_DIR/edoreczenia-cli.py"
+
+# Sprawdź czy Python jest dostępny
+if ! command -v python3 &> /dev/null; then
+    echo "❌ Python3 nie jest zainstalowany"
+    exit 1
+fi
+
+# Sprawdź czy requests jest zainstalowany
+python3 -c "import requests" 2>/dev/null || {
+    echo "❌ Brak modułu 'requests'. Instaluję..."
+    pip3 install requests --quiet
+}
+
+# Uruchom CLI
+python3 "$CLI_SCRIPT" "$@"

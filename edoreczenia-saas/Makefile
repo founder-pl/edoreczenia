@@ -1,5 +1,6 @@
 .PHONY: build up down logs test clean help status dev install
 .PHONY: all-up all-down all-status proxy-up sync-up dsl-up
+.PHONY: cli-login cli-inbox cli-send cli-read cli-folders cli-status
 
 # Domyślny cel
 help:
@@ -25,6 +26,14 @@ help:
 	@echo "  make all-up     - Uruchamia WSZYSTKIE usługi"
 	@echo "  make all-down   - Zatrzymuje WSZYSTKIE usługi"
 	@echo "  make all-status - Status wszystkich usług"
+	@echo ""
+	@echo "CLI (Shell DSL):"
+	@echo "  make cli-login  - Zaloguj się"
+	@echo "  make cli-inbox  - Pokaż wiadomości"
+	@echo "  make cli-send   - Wyślij wiadomość"
+	@echo "  make cli-read   - Przeczytaj wiadomość"
+	@echo "  make cli-folders - Pokaż foldery"
+	@echo "  make cli-status - Status integracji"
 	@echo ""
 	@echo "Dane dostępowe:"
 	@echo "  Panel SaaS:    http://localhost:3500"
@@ -139,3 +148,35 @@ dsl-up:
 # Uruchomienie w tle
 up-detached:
 	docker-compose up -d --build
+
+# ═══════════════════════════════════════════════════════════════
+# CLI (Shell DSL)
+# ═══════════════════════════════════════════════════════════════
+
+cli-login:
+	@python3 cli/edoreczenia-cli.py login -u testuser -p testpass123
+
+cli-inbox:
+	@python3 cli/edoreczenia-cli.py inbox
+
+cli-sent:
+	@python3 cli/edoreczenia-cli.py inbox -f sent
+
+cli-send:
+	@python3 cli/edoreczenia-cli.py send
+
+cli-read:
+	@echo "Użycie: python3 cli/edoreczenia-cli.py read <message_id>"
+	@python3 cli/edoreczenia-cli.py inbox
+
+cli-folders:
+	@python3 cli/edoreczenia-cli.py folders
+
+cli-status:
+	@python3 cli/edoreczenia-cli.py status
+
+cli-whoami:
+	@python3 cli/edoreczenia-cli.py whoami
+
+cli-health:
+	@python3 cli/edoreczenia-cli.py health

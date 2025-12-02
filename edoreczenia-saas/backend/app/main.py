@@ -237,33 +237,111 @@ async def get_messages(
     except Exception as e:
         print(f"Error fetching messages: {e}")
     
-    # Fallback demo data
-    return [
-        MessageResponse(
-            id="msg-001",
-            subject="Decyzja administracyjna nr 123/2024",
-            sender={"address": "AE:PL-URZAD-MIAS-TOWAR-01", "name": "Urząd Miasta"},
-            status="READ",
-            receivedAt=datetime.now() - timedelta(hours=2),
-            attachments=[{"filename": "decyzja.pdf", "size": 15420}]
-        ),
-        MessageResponse(
-            id="msg-002",
-            subject="Zawiadomienie o terminie rozprawy",
-            sender={"address": "AE:PL-SADRE-JONO-WYYYY-02", "name": "Sąd Rejonowy"},
-            status="RECEIVED",
-            receivedAt=datetime.now() - timedelta(days=1),
-            attachments=[]
-        ),
-        MessageResponse(
-            id="msg-003",
-            subject="Wezwanie do uzupełnienia dokumentów",
-            sender={"address": "AE:PL-ZUSWA-RSZW-AODZ-03", "name": "ZUS"},
-            status="RECEIVED",
-            receivedAt=datetime.now() - timedelta(days=3),
-            attachments=[{"filename": "wezwanie.pdf", "size": 8200}]
-        )
-    ]
+    # Fallback demo data - różne dla każdego folderu
+    demo_messages = {
+        "inbox": [
+            MessageResponse(
+                id="msg-001",
+                subject="Decyzja administracyjna nr 123/2024",
+                sender={"address": "AE:PL-URZAD-MIAS-TOWAR-01", "name": "Urząd Miasta"},
+                status="READ",
+                receivedAt=datetime.now() - timedelta(hours=2),
+                attachments=[{"filename": "decyzja.pdf", "size": 15420}]
+            ),
+            MessageResponse(
+                id="msg-002",
+                subject="Zawiadomienie o terminie rozprawy",
+                sender={"address": "AE:PL-SADRE-JONO-WYYYY-02", "name": "Sąd Rejonowy"},
+                status="RECEIVED",
+                receivedAt=datetime.now() - timedelta(days=1),
+                attachments=[]
+            ),
+            MessageResponse(
+                id="msg-003",
+                subject="Wezwanie do uzupełnienia dokumentów",
+                sender={"address": "AE:PL-ZUSWA-RSZW-AODZ-03", "name": "ZUS"},
+                status="RECEIVED",
+                receivedAt=datetime.now() - timedelta(days=3),
+                attachments=[{"filename": "wezwanie.pdf", "size": 8200}]
+            )
+        ],
+        "sent": [
+            MessageResponse(
+                id="msg-sent-001",
+                subject="Odpowiedź na decyzję nr 123/2024",
+                sender={"address": "AE:PL-12345-67890-ABCDE-12", "name": "Użytkownik Testowy"},
+                recipient={"address": "AE:PL-URZAD-MIAS-TOWAR-01", "name": "Urząd Miasta"},
+                status="SENT",
+                sentAt=datetime.now() - timedelta(hours=5),
+                attachments=[]
+            ),
+            MessageResponse(
+                id="msg-sent-002",
+                subject="Wniosek o wydanie zaświadczenia",
+                sender={"address": "AE:PL-12345-67890-ABCDE-12", "name": "Użytkownik Testowy"},
+                recipient={"address": "AE:PL-ZUSWA-RSZW-AODZ-03", "name": "ZUS"},
+                status="DELIVERED",
+                sentAt=datetime.now() - timedelta(days=2),
+                attachments=[{"filename": "wniosek.pdf", "size": 12300}]
+            )
+        ],
+        "drafts": [
+            MessageResponse(
+                id="msg-draft-001",
+                subject="[Robocza] Odwołanie od decyzji",
+                sender={"address": "AE:PL-12345-67890-ABCDE-12", "name": "Użytkownik Testowy"},
+                status="DRAFT",
+                receivedAt=datetime.now() - timedelta(hours=1),
+                attachments=[]
+            )
+        ],
+        "trash": [
+            MessageResponse(
+                id="msg-trash-001",
+                subject="Stara korespondencja - do usunięcia",
+                sender={"address": "AE:PL-FIRMA-XXXX-YYYY-01", "name": "Firma XYZ"},
+                status="READ",
+                receivedAt=datetime.now() - timedelta(days=30),
+                attachments=[]
+            ),
+            MessageResponse(
+                id="msg-trash-002",
+                subject="Nieaktualne powiadomienie",
+                sender={"address": "AE:PL-URZAD-SKAR-BOWY-01", "name": "Urząd Skarbowy"},
+                status="READ",
+                receivedAt=datetime.now() - timedelta(days=45),
+                attachments=[{"filename": "stary_dokument.pdf", "size": 5400}]
+            )
+        ],
+        "archive": [
+            MessageResponse(
+                id="msg-arch-001",
+                subject="Potwierdzenie złożenia deklaracji PIT-37",
+                sender={"address": "AE:PL-URZAD-SKAR-BOWY-01", "name": "Urząd Skarbowy"},
+                status="READ",
+                receivedAt=datetime.now() - timedelta(days=90),
+                attachments=[{"filename": "UPO_PIT37.pdf", "size": 25000}]
+            ),
+            MessageResponse(
+                id="msg-arch-002",
+                subject="Decyzja o przyznaniu świadczenia",
+                sender={"address": "AE:PL-ZUSWA-RSZW-AODZ-03", "name": "ZUS"},
+                status="READ",
+                receivedAt=datetime.now() - timedelta(days=120),
+                attachments=[{"filename": "decyzja_swiadczenie.pdf", "size": 18700}]
+            ),
+            MessageResponse(
+                id="msg-arch-003",
+                subject="Zaświadczenie o niezaleganiu",
+                sender={"address": "AE:PL-URZAD-SKAR-BOWY-01", "name": "Urząd Skarbowy"},
+                status="READ",
+                receivedAt=datetime.now() - timedelta(days=180),
+                attachments=[{"filename": "zaswiadczenie.pdf", "size": 9800}]
+            )
+        ]
+    }
+    
+    return demo_messages.get(folder, demo_messages["inbox"])
 
 @app.get("/api/messages/{message_id}", response_model=MessageResponse)
 async def get_message(message_id: str, token_data: dict = Depends(verify_jwt_token)):
@@ -280,17 +358,104 @@ async def get_message(message_id: str, token_data: dict = Depends(verify_jwt_tok
     except Exception:
         pass
     
-    # Demo fallback
+    # Demo fallback - szczegóły wiadomości
+    demo_details = {
+        "msg-001": MessageResponse(
+            id="msg-001",
+            subject="Decyzja administracyjna nr 123/2024",
+            sender={"address": "AE:PL-URZAD-MIAS-TOWAR-01", "name": "Urząd Miasta Warszawa"},
+            status="READ",
+            receivedAt=datetime.now() - timedelta(hours=2),
+            content="Szanowny Panie/Pani,\n\nNa podstawie art. 104 Kodeksu postępowania administracyjnego, po rozpatrzeniu wniosku z dnia 15.11.2024 r., orzekam:\n\n1. Zatwierdzam projekt budowlany dotyczący rozbudowy budynku mieszkalnego.\n2. Decyzja jest ostateczna i podlega wykonaniu.\n\nPouczenie:\nOd niniejszej decyzji przysługuje odwołanie do Samorządowego Kolegium Odwoławczego w terminie 14 dni od daty doręczenia.\n\nZ poważaniem,\nJan Kowalski\nNaczelnik Wydziału",
+            attachments=[
+                {"id": "att-001", "filename": "decyzja_123_2024.pdf", "contentType": "application/pdf", "size": 15420}
+            ]
+        ),
+        "msg-002": MessageResponse(
+            id="msg-002",
+            subject="Zawiadomienie o terminie rozprawy",
+            sender={"address": "AE:PL-SADRE-JONO-WYYYY-02", "name": "Sąd Rejonowy"},
+            status="RECEIVED",
+            receivedAt=datetime.now() - timedelta(days=1),
+            content="ZAWIADOMIENIE\n\nSąd Rejonowy w Warszawie, Wydział Cywilny zawiadamia, że rozprawa w sprawie sygn. akt I C 1234/24 odbędzie się w dniu 15.01.2025 r. o godz. 10:00 w sali nr 205.\n\nStawiennictwo obowiązkowe.\n\nSekretariat Sądu",
+            attachments=[]
+        ),
+        "msg-003": MessageResponse(
+            id="msg-003",
+            subject="Wezwanie do uzupełnienia dokumentów",
+            sender={"address": "AE:PL-ZUSWA-RSZW-AODZ-03", "name": "ZUS Oddział Warszawa"},
+            status="RECEIVED",
+            receivedAt=datetime.now() - timedelta(days=3),
+            content="Szanowny Płatniku,\n\nW związku z prowadzonym postępowaniem wzywamy do uzupełnienia dokumentacji w terminie 7 dni od daty doręczenia niniejszego pisma.\n\nWymagane dokumenty:\n- Zaświadczenie o zatrudnieniu\n- Kopia umowy o pracę\n- Druk ZUS ZUA\n\nBrak odpowiedzi skutkować będzie wydaniem decyzji na podstawie posiadanych dokumentów.\n\nZ poważaniem,\nZUS Oddział w Warszawie",
+            attachments=[
+                {"id": "att-003", "filename": "wezwanie.pdf", "contentType": "application/pdf", "size": 8200}
+            ]
+        ),
+        "msg-sent-001": MessageResponse(
+            id="msg-sent-001",
+            subject="Odpowiedź na decyzję nr 123/2024",
+            sender={"address": "AE:PL-12345-67890-ABCDE-12", "name": "Użytkownik Testowy"},
+            recipient={"address": "AE:PL-URZAD-MIAS-TOWAR-01", "name": "Urząd Miasta"},
+            status="SENT",
+            sentAt=datetime.now() - timedelta(hours=5),
+            content="Szanowni Państwo,\n\nW odpowiedzi na decyzję nr 123/2024 informuję, że akceptuję jej treść i przystępuję do realizacji.\n\nZ poważaniem",
+            attachments=[]
+        ),
+        "msg-sent-002": MessageResponse(
+            id="msg-sent-002",
+            subject="Wniosek o wydanie zaświadczenia",
+            sender={"address": "AE:PL-12345-67890-ABCDE-12", "name": "Użytkownik Testowy"},
+            recipient={"address": "AE:PL-ZUSWA-RSZW-AODZ-03", "name": "ZUS"},
+            status="DELIVERED",
+            sentAt=datetime.now() - timedelta(days=2),
+            content="Wnoszę o wydanie zaświadczenia o niezaleganiu w opłacaniu składek ZUS.\n\nDane wnioskodawcy:\nNIP: 1234567890\nREGON: 123456789",
+            attachments=[
+                {"id": "att-sent-002", "filename": "wniosek.pdf", "contentType": "application/pdf", "size": 12300}
+            ]
+        ),
+        "msg-draft-001": MessageResponse(
+            id="msg-draft-001",
+            subject="[Robocza] Odwołanie od decyzji",
+            sender={"address": "AE:PL-12345-67890-ABCDE-12", "name": "Użytkownik Testowy"},
+            status="DRAFT",
+            receivedAt=datetime.now() - timedelta(hours=1),
+            content="Niniejszym składam odwołanie od decyzji...\n\n[WERSJA ROBOCZA - DO UZUPEŁNIENIA]",
+            attachments=[]
+        ),
+        "msg-trash-001": MessageResponse(
+            id="msg-trash-001",
+            subject="Stara korespondencja - do usunięcia",
+            sender={"address": "AE:PL-FIRMA-XXXX-YYYY-01", "name": "Firma XYZ"},
+            status="READ",
+            receivedAt=datetime.now() - timedelta(days=30),
+            content="Oferta handlowa - nieaktualna",
+            attachments=[]
+        ),
+        "msg-arch-001": MessageResponse(
+            id="msg-arch-001",
+            subject="Potwierdzenie złożenia deklaracji PIT-37",
+            sender={"address": "AE:PL-URZAD-SKAR-BOWY-01", "name": "Urząd Skarbowy"},
+            status="READ",
+            receivedAt=datetime.now() - timedelta(days=90),
+            content="Urzędowe Poświadczenie Odbioru\n\nPotwierdzamy przyjęcie deklaracji PIT-37 za rok 2023.\nNumer referencyjny: UPO/2024/123456\nData złożenia: 2024-04-15",
+            attachments=[
+                {"id": "att-arch-001", "filename": "UPO_PIT37.pdf", "contentType": "application/pdf", "size": 25000}
+            ]
+        )
+    }
+    
+    if message_id in demo_details:
+        return demo_details[message_id]
+    
+    # Domyślna odpowiedź dla nieznanych ID
     return MessageResponse(
         id=message_id,
-        subject="Decyzja administracyjna nr 123/2024",
-        sender={"address": "AE:PL-URZAD-MIAS-TOWAR-01", "name": "Urząd Miasta Warszawa"},
+        subject=f"Wiadomość {message_id}",
+        sender={"address": "AE:PL-UNKNOWN-0000-0000-00", "name": "Nieznany nadawca"},
         status="READ",
-        receivedAt=datetime.now() - timedelta(hours=2),
-        content="Szanowny Panie/Pani,\n\nW załączeniu przesyłam decyzję administracyjną...",
-        attachments=[
-            {"id": "att-001", "filename": "decyzja_123_2024.pdf", "contentType": "application/pdf", "size": 15420}
-        ]
+        receivedAt=datetime.now(),
+        content="Treść wiadomości niedostępna.",
+        attachments=[]
     )
 
 @app.post("/api/messages", response_model=MessageResponse)
