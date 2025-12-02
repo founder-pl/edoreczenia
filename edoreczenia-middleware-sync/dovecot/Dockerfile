@@ -15,10 +15,15 @@ RUN useradd -m -s /bin/bash -u 1000 mailuser \
     && mkdir -p /home/mailuser/Maildir \
     && chown -R mailuser:mailuser /home/mailuser
 
-# Create e-Doreczenia folders
-RUN mkdir -p /home/mailuser/Maildir/.e-Doreczenia/cur \
-    && mkdir -p /home/mailuser/Maildir/.e-Doreczenia/new \
-    && mkdir -p /home/mailuser/Maildir/.e-Doreczenia/tmp \
+# Create INBOX structure (required for Maildir)
+RUN mkdir -p /home/mailuser/Maildir/cur \
+    && mkdir -p /home/mailuser/Maildir/new \
+    && mkdir -p /home/mailuser/Maildir/tmp
+
+# Create e-Doreczenia folders (INBOX.e-Doreczenia = .INBOX.e-Doreczenia in Maildir)
+RUN mkdir -p /home/mailuser/Maildir/.INBOX.e-Doreczenia/cur \
+    && mkdir -p /home/mailuser/Maildir/.INBOX.e-Doreczenia/new \
+    && mkdir -p /home/mailuser/Maildir/.INBOX.e-Doreczenia/tmp \
     && mkdir -p /home/mailuser/Maildir/.e-Doreczenia-Wyslij/cur \
     && mkdir -p /home/mailuser/Maildir/.e-Doreczenia-Wyslij/new \
     && mkdir -p /home/mailuser/Maildir/.e-Doreczenia-Wyslij/tmp \

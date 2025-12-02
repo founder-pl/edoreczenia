@@ -381,6 +381,253 @@ def test_sync_webmail() -> bool:
 # Testy przepływu wiadomości E2E
 # ============================================
 
+def print_route(step: int, route: str, status: str = "OK", details: str = ""):
+    """Wyświetla krok w trasie przepływu."""
+    icon = "✓" if status == "OK" else "✗" if status == "FAIL" else "→"
+    print(f"    [{step}] {icon} {route}")
+    if details:
+        print(f"        └─ {details}")
+
+
+def test_e2e_flow_detailed_proxy() -> bool:
+    """
+    Szczegółowy test przepływu dla Proxy IMAP/SMTP.
+    Pokazuje wszystkie route przy odbieraniu i wysyłaniu.
+    """
+    print("\n  📥 ODBIERANIE WIADOMOŚCI (API → Proxy IMAP → Klient)")
+    print("  " + "-" * 50)
+    
+    success = True
+    
+    try:
+        # Route 1: Klient → OAuth2 Token
+        print_route(1, "Klient → Symulator API: POST /oauth/token")
+        token = get_api_token(PROXY_SIMULATOR_URL)
+        print_route(1, "Symulator API → Klient: Token OAuth2", "OK", f"token={token[:20]}...")
+        
+        # Route 2: Symulator API → GET messages
+        print_route(2, f"Klient → Symulator API: GET /ua/v5/{TEST_ADDRESS}/messages")
+        api_messages = get_api_messages(PROXY_SIMULATOR_URL, token)
+        print_route(2, "Symulator API → Klient: Lista wiadomości", "OK", f"count={len(api_messages)}")
+        
+        # Route 3: Klient IMAP → Proxy IMAP
+        print_route(3, f"Klient IMAP → Proxy IMAP: CONNECT {PROXY_IMAP_HOST}:{PROXY_IMAP_PORT}")
+        imap = imaplib.IMAP4(PROXY_IMAP_HOST, PROXY_IMAP_PORT)
+        print_route(3, "Proxy IMAP → Klient: * OK IMAP ready", "OK")
+        
+        # Route 4: LOGIN
+        print_route(4, f"Klient → Proxy IMAP: LOGIN {PROXY_USER} ***")
+        imap.login(PROXY_USER, PROXY_PASS)
+        print_route(4, "Proxy IMAP → Klient: LOGIN OK", "OK")
+        
+        # Route 5: Proxy → API (wewnętrzne)
+        print_route(5, "Proxy IMAP → Symulator API: GET /ua/v5/.../messages (wewnętrzne)", "→")
+        
+        # Route 6: SELECT INBOX
+        print_route(6, "Klient → Proxy IMAP: SELECT INBOX")
+        imap.select("INBOX")
+        print_route(6, "Proxy IMAP → Klient: SELECT OK", "OK")
+        
+        # Route 7: SEARCH
+        print_route(7, "Klient → Proxy IMAP: SEARCH ALL")
+        status, msg_ids = imap.search(None, "ALL")
+        msg_count = len(msg_ids[0].split()) if msg_ids[0] else 0
+        print_route(7, "Proxy IMAP → Klient: SEARCH OK", "OK", f"messages={msg_count}")
+        
+        # Route 8: FETCH
+        if msg_count > 0:
+            print_route(8, "Klient → Proxy IMAP: FETCH 1 (BODY[])")
+            status, data = imap.fetch(b"1", "(BODY[HEADER.FIELDS (SUBJECT FROM)])")
+            print_route(8, "Proxy IMAP → Klient: FETCH OK", "OK")
+        
+        # Route 9: LOGOUT
+        print_route(9, "Klient → Proxy IMAP: LOGOUT")
+        imap.logout()
+        print_route(9, "Proxy IMAP → Klient: BYE", "OK")
+        
+    except Exception as e:
+        print_route(0, f"BŁĄD: {e}", "FAIL")
+        success = False
+    
+    print("\n  📤 WYSYŁANIE WIADOMOŚCI (Klient → Proxy SMTP → API)")
+    print("  " + "-" * 50)
+    
+    try:
+        # Route 1: SMTP CONNECT
+        print_route(1, f"Klient SMTP → Proxy SMTP: CONNECT {PROXY_SMTP_HOST}:{PROXY_SMTP_PORT}")
+        smtp = smtplib.SMTP(PROXY_SMTP_HOST, PROXY_SMTP_PORT, timeout=10)
+        print_route(1, "Proxy SMTP → Klient: 220 SMTP ready", "OK")
+        
+        # Route 2: EHLO
+        print_route(2, "Klient → Proxy SMTP: EHLO")
+        smtp.ehlo()
+        print_route(2, "Proxy SMTP → Klient: 250 EHLO OK", "OK")
+        
+        # Route 3: AUTH LOGIN
+        print_route(3, f"Klient → Proxy SMTP: AUTH LOGIN {PROXY_USER}")
+        smtp.login(PROXY_USER, PROXY_PASS)
+        print_route(3, "Proxy SMTP → Klient: 235 AUTH OK", "OK")
+        
+        # Route 4: MAIL FROM
+        test_subject = f"E2E Route Test {time.strftime('%H%M%S')}"
+        print_route(4, f"Klient → Proxy SMTP: MAIL FROM:<{PROXY_USER}@edoreczenia.local>")
+        
+        # Route 5: RCPT TO
+        print_route(5, "Klient → Proxy SMTP: RCPT TO:<AE:PL-ODBIORCA-TEST-00001>")
+        
+        # Route 6: DATA
+        print_route(6, "Klient → Proxy SMTP: DATA")
+        print_route(6, f"Klient → Proxy SMTP: Subject: {test_subject}", "→")
+        
+        # Route 7: Proxy → API (wewnętrzne)
+        print_route(7, "Proxy SMTP → Symulator API: POST /ua/v5/.../messages (wewnętrzne)", "→")
+        
+        msg = MIMEText("Treść testowa wiadomości E2E z logowaniem route.")
+        msg["Subject"] = test_subject
+        msg["From"] = f"{PROXY_USER}@edoreczenia.local"
+        msg["To"] = "AE:PL-ODBIORCA-TEST-00001"
+        
+        try:
+            smtp.sendmail(
+                f"{PROXY_USER}@edoreczenia.local",
+                ["AE:PL-ODBIORCA-TEST-00001"],
+                msg.as_string()
+            )
+            print_route(8, "Proxy SMTP → Klient: 250 Message accepted", "OK")
+        except smtplib.SMTPResponseException as e:
+            print_route(8, f"Proxy SMTP → Klient: {e.smtp_code} {e.smtp_error}", "FAIL")
+            success = False
+        
+        # Route 9: QUIT
+        print_route(9, "Klient → Proxy SMTP: QUIT")
+        smtp.quit()
+        print_route(9, "Proxy SMTP → Klient: 221 BYE", "OK")
+        
+    except Exception as e:
+        print_route(0, f"BŁĄD: {e}", "FAIL")
+        success = False
+    
+    print_result("E2E Flow: Proxy IMAP/SMTP", success, "Szczegółowy przepływ powyżej")
+    return success
+
+
+def test_e2e_flow_detailed_sync() -> bool:
+    """
+    Szczegółowy test przepływu dla Middleware Sync.
+    Pokazuje wszystkie route przy synchronizacji.
+    """
+    print("\n  🔄 SYNCHRONIZACJA (API e-Doręczeń → Dovecot IMAP)")
+    print("  " + "-" * 50)
+    
+    success = True
+    
+    try:
+        # Route 1: Sync → OAuth2 Token
+        print_route(1, "Sync Engine → Symulator API: POST /oauth/token")
+        token = get_api_token(SYNC_SIMULATOR_URL)
+        print_route(1, "Symulator API → Sync Engine: Token OAuth2", "OK", f"token={token[:20]}...")
+        
+        # Route 2: Sync → GET messages
+        print_route(2, f"Sync Engine → Symulator API: GET /ua/v5/{TEST_ADDRESS}/messages?folder=inbox")
+        api_messages = get_api_messages(SYNC_SIMULATOR_URL, token)
+        print_route(2, "Symulator API → Sync Engine: Lista wiadomości", "OK", f"count={len(api_messages)}")
+        
+        # Route 3: Sync → Dovecot IMAP
+        print_route(3, f"Sync Engine → Dovecot IMAP: CONNECT {DOVECOT_HOST}:{DOVECOT_PORT}")
+        imap = imaplib.IMAP4(DOVECOT_HOST, DOVECOT_PORT)
+        print_route(3, "Dovecot IMAP → Sync Engine: * OK IMAP ready", "OK")
+        
+        # Route 4: LOGIN
+        print_route(4, f"Sync Engine → Dovecot: LOGIN {DOVECOT_USER} ***")
+        imap.login(DOVECOT_USER, DOVECOT_PASS)
+        print_route(4, "Dovecot → Sync Engine: LOGIN OK", "OK")
+        
+        # Route 5: SELECT folder e-Doręczeń
+        print_route(5, "Sync Engine → Dovecot: SELECT INBOX.e-Doreczenia")
+        try:
+            imap.select("INBOX.e-Doreczenia")
+            print_route(5, "Dovecot → Sync Engine: SELECT OK", "OK")
+            
+            # Route 6: SEARCH
+            print_route(6, "Sync Engine → Dovecot: SEARCH ALL")
+            status, msg_ids = imap.search(None, "ALL")
+            msg_count = len(msg_ids[0].split()) if msg_ids[0] else 0
+            print_route(6, "Dovecot → Sync Engine: SEARCH OK", "OK", f"synced_messages={msg_count}")
+            
+            # Route 7: APPEND (dla nowych wiadomości)
+            print_route(7, "Sync Engine → Dovecot: APPEND INBOX.e-Doreczenia (dla nowych)", "→", "wiadomości z API")
+            
+        except Exception as e:
+            print_route(5, f"Dovecot → Sync Engine: SELECT FAIL", "FAIL", str(e))
+        
+        # Route 8: LOGOUT
+        print_route(8, "Sync Engine → Dovecot: LOGOUT")
+        imap.logout()
+        print_route(8, "Dovecot → Sync Engine: BYE", "OK")
+        
+    except Exception as e:
+        print_route(0, f"BŁĄD: {e}", "FAIL")
+        success = False
+    
+    print("\n  📧 ODCZYT ZSYNCHRONIZOWANYCH (Klient → Dovecot)")
+    print("  " + "-" * 50)
+    
+    try:
+        # Route 1: Klient → Dovecot
+        print_route(1, f"Klient IMAP → Dovecot: CONNECT {DOVECOT_HOST}:{DOVECOT_PORT}")
+        imap = imaplib.IMAP4(DOVECOT_HOST, DOVECOT_PORT)
+        print_route(1, "Dovecot → Klient: * OK IMAP ready", "OK")
+        
+        # Route 2: LOGIN
+        print_route(2, f"Klient → Dovecot: LOGIN {DOVECOT_USER} ***")
+        imap.login(DOVECOT_USER, DOVECOT_PASS)
+        print_route(2, "Dovecot → Klient: LOGIN OK", "OK")
+        
+        # Route 3: LIST folders
+        print_route(3, "Klient → Dovecot: LIST \"\" \"*\"")
+        status, folders = imap.list()
+        edoreczenia_folders = [f for f in folders if b"e-Doreczenia" in f] if folders else []
+        print_route(3, "Dovecot → Klient: LIST OK", "OK", f"e-Doręczeń folders={len(edoreczenia_folders)}")
+        
+        # Route 4: SELECT e-Doręczeń folder
+        print_route(4, "Klient → Dovecot: SELECT INBOX.e-Doreczenia")
+        try:
+            imap.select("INBOX.e-Doreczenia")
+            print_route(4, "Dovecot → Klient: SELECT OK", "OK")
+            
+            # Route 5: SEARCH
+            print_route(5, "Klient → Dovecot: SEARCH ALL")
+            status, msg_ids = imap.search(None, "ALL")
+            msg_count = len(msg_ids[0].split()) if msg_ids[0] else 0
+            print_route(5, "Dovecot → Klient: SEARCH OK", "OK", f"messages={msg_count}")
+            
+            # Route 6: FETCH
+            if msg_count > 0:
+                print_route(6, "Klient → Dovecot: FETCH 1 (BODY[HEADER])")
+                status, data = imap.fetch(b"1", "(BODY[HEADER.FIELDS (SUBJECT FROM)])")
+                if data and data[0] and isinstance(data[0], tuple):
+                    header = data[0][1].decode(errors='ignore') if isinstance(data[0][1], bytes) else str(data[0][1])
+                    subject = header.split("Subject:")[-1].split("\r\n")[0].strip() if "Subject:" in header else "(brak)"
+                    print_route(6, "Dovecot → Klient: FETCH OK", "OK", f"Subject: {subject[:40]}...")
+                else:
+                    print_route(6, "Dovecot → Klient: FETCH OK", "OK")
+        except Exception as e:
+            print_route(4, f"Dovecot → Klient: SELECT FAIL", "FAIL", str(e))
+            success = False
+        
+        # Route 7: LOGOUT
+        print_route(7, "Klient → Dovecot: LOGOUT")
+        imap.logout()
+        print_route(7, "Dovecot → Klient: BYE", "OK")
+        
+    except Exception as e:
+        print_route(0, f"BŁĄD: {e}", "FAIL")
+        success = False
+    
+    print_result("E2E Flow: Middleware Sync", success, "Szczegółowy przepływ powyżej")
+    return success
+
+
 def test_e2e_api_to_proxy_imap() -> bool:
     """Test: Wiadomość z API -> Proxy IMAP."""
     try:
@@ -529,6 +776,13 @@ def main():
     print_header("5. PRZEPŁYW WIADOMOŚCI E2E")
     results.append(test_e2e_api_to_proxy_imap())
     results.append(test_e2e_smtp_to_api())
+    
+    # Szczegółowe logi przepływu
+    print_header("6. SZCZEGÓŁOWY PRZEPŁYW - PROXY IMAP/SMTP")
+    results.append(test_e2e_flow_detailed_proxy())
+    
+    print_header("7. SZCZEGÓŁOWY PRZEPŁYW - MIDDLEWARE SYNC")
+    results.append(test_e2e_flow_detailed_sync())
     
     # Podsumowanie
     print_header("PODSUMOWANIE")

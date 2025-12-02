@@ -161,7 +161,20 @@ class IMAPMailbox:
         )
 
         # Wyciągnij UID z odpowiedzi
-        uid = result.get("APPENDUID", (None, None))[1] if result else None
+        # imapclient.append() zwraca bytes z odpowiedzią serwera lub None
+        uid = None
+        if result:
+            # Odpowiedź może zawierać APPENDUID w formacie: b'[APPENDUID 123 456]'
+            if isinstance(result, bytes):
+                result_str = result.decode("utf-8", errors="replace")
+                if "APPENDUID" in result_str:
+                    # Parsuj APPENDUID z odpowiedzi
+                    import re
+                    match = re.search(r"APPENDUID\s+\d+\s+(\d+)", result_str)
+                    if match:
+                        uid = int(match.group(1))
+            elif isinstance(result, dict):
+                uid = result.get("APPENDUID", (None, None))[1]
 
         logger.info(
             "Wiadomość dodana do IMAP",

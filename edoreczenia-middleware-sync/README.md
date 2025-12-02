@@ -172,22 +172,21 @@ pytest -m "not slow"
 ### Szybki start
 
 ```bash
-# Uruchomienie wszystkich serwisów
+# Uruchomienie
 make up
 
-# Lub ręcznie
-docker-compose up -d
+# Lub w tle
+docker-compose up -d --build
 ```
 
-### Dostępne serwisy
+### Dostępne usługi
 
-| Serwis | URL | Opis |
-|--------|-----|------|
-| Symulator API | http://localhost:8080 | Symulator REST API e-Doręczeń |
-| API Docs | http://localhost:8080/docs | Dokumentacja Swagger |
-| Dovecot IMAP | localhost:1143 | Lokalny serwer IMAP |
-| Webmail | http://localhost:9000 | Roundcube |
-| Adminer | http://localhost:9001 | Przeglądarka bazy (debug) |
+| Usługa | URL/Port | Opis |
+|--------|----------|------|
+| **Webmail** | http://localhost:9180 | Roundcube - panel webowy |
+| **API Docs** | http://localhost:8280/docs | Swagger dokumentacja API |
+| **IMAP** | localhost:21143 | Dovecot IMAP |
+| **Adminer** | http://localhost:9001 | Przeglądarka bazy (debug) |
 
 ### Dane testowe
 
@@ -203,15 +202,66 @@ Test Address: AE:PL-12345-67890-ABCDE-12
 ### Komendy Make
 
 ```bash
+# Komendy lokalne
 make build       # Buduje obrazy
 make up          # Uruchamia kontenery
 make down        # Zatrzymuje kontenery
 make logs        # Pokazuje logi
 make test        # Uruchamia testy
+make status      # Status kontenerów
 make sync-once   # Jednorazowa synchronizacja
 make sync-status # Status synchronizacji
-make debug       # Tryb debug z adminerem
 make clean       # Czyści zasoby
+
+# Komendy wszystkich usług
+make all-up     # Uruchamia WSZYSTKIE usługi (proxy + sync + dsl)
+make all-down   # Zatrzymuje WSZYSTKIE usługi
+make all-status # Status wszystkich usług
+make e2e-test   # Testy E2E całego systemu
+
+# Komendy innych usług
+make proxy-up   # Uruchamia proxy IMAP/SMTP
+make dsl-up     # Uruchamia DSL
+```
+
+### Przykładowe uruchomienie i testy
+
+```bash
+# 1. Uruchom usługę
+make up
+
+# 2. Sprawdź status
+make status
+
+# 3. Sprawdź API w przeglądarce
+open http://localhost:8280/docs
+
+# 4. Zaloguj się do webmaila
+open http://localhost:9180
+# Login: mailuser / mailpass123
+
+# 5. Test IMAP przez shell
+python3 -c "
+import imaplib
+m = imaplib.IMAP4('localhost', 21143)
+m.login('mailuser', 'mailpass123')
+m.select('INBOX.e-Doreczenia')
+typ, data = m.search(None, 'ALL')
+print(f'Wiadomości zsynchronizowane: {len(data[0].split())}')
+m.logout()
+"
+
+# 6. Wymuś synchronizację
+make sync-once
+
+# 7. Sprawdź status synchronizacji
+make sync-status
+
+# 8. Uruchom testy jednostkowe
+make test
+
+# 9. Uruchom testy E2E całego systemu
+make e2e-test
 ```
 
 ### Architektura Docker
@@ -219,16 +269,17 @@ make clean       # Czyści zasoby
 ```
 ┌────────────────────────────────────────────────────────────────┐
 │                      Docker Network                             │
-│                                                                │
-│  ┌─────────────┐    ┌─────────────┐    ┌─────────────┐        │
-│  │  Simulator  │◄───│  Middleware │───▶│  Dovecot    │        │
-│  │  :8080      │    │    Sync     │    │   :143      │        │
-│  └─────────────┘    └──────┬──────┘    └──────┬──────┘        │
-│                            │                   │               │
-│                     ┌──────▼──────┐    ┌──────▼──────┐        │
-│                     │  SQLite DB  │    │  Webmail    │        │
-│                     │  (volume)   │    │   :9000     │        │
-│                     └─────────────┘    └─────────────┘        │
+│                                                                 │
+│  ┌─────────────┐    ┌─────────────┐    ┌─────────────┐         │
+│  │  Simulator  │◄───│  Middleware │───▶│  Dovecot    │         │
+│  │  :8280      │    │    Sync     │    │  :21143     │         │
+│  │  /docs      │    │             │    │             │         │
+│  └─────────────┘    └──────┬──────┘    └──────┬──────┘         │
+│                            │                   │                │
+│                     ┌──────▼──────┐    ┌──────▼──────┐         │
+│                     │  SQLite DB  │    │  Webmail    │         │
+│                     │  (volume)   │    │   :9180     │         │
+│                     └─────────────┘    └─────────────┘         │
 └────────────────────────────────────────────────────────────────┘
 ```
 
@@ -240,6 +291,14 @@ Po uruchomieniu, symulator zawiera 3 przykładowe wiadomości:
 3. **Wezwanie do uzupełnienia dokumentów** - z wieloma załącznikami
 
 Wiadomości zostaną automatycznie zsynchronizowane do folderu `INBOX.e-Doreczenia` w Dovecot.
+
+## 🔗 Powiązane usługi
+
+| Usługa | Folder | Porty | Opis |
+|--------|--------|-------|------|
+| **Proxy IMAP/SMTP** | `edoreczenia-proxy-imap-smtp` | 8180, 11143, 11025, 9080 | Proxy protokołów |
+| **Middleware Sync** | `edoreczenia-middleware-sync` | 8280, 21143, 9180 | Ten projekt |
+| **DSL** | `edoreczenia-dsl` | 8380, 31143, 31025 | Apache Camel + Python Client |
 
 ## 📄 Licencja
 

@@ -145,22 +145,21 @@ SMTP_SSL_KEY=/path/to/key.pem
 ### Szybki start
 
 ```bash
-# Uruchomienie wszystkich serwisów
+# Uruchomienie
 make up
 
-# Lub ręcznie
-docker-compose up -d
+# Lub w tle
+docker-compose up -d --build
 ```
 
-### Dostępne serwisy
+### Dostępne usługi
 
-| Serwis | URL | Opis |
-|--------|-----|------|
-| Symulator API | http://localhost:8080 | Symulator REST API e-Doręczeń |
-| API Docs | http://localhost:8080/docs | Dokumentacja Swagger |
-| Proxy IMAP | localhost:1143 | Serwer IMAP |
-| Proxy SMTP | localhost:1025 | Serwer SMTP |
-| Webmail | http://localhost:9000 | Roundcube (opcjonalny) |
+| Usługa | URL/Port | Opis |
+|--------|----------|------|
+| **Webmail** | http://localhost:9080 | Roundcube - panel webowy |
+| **API Docs** | http://localhost:8180/docs | Swagger dokumentacja API |
+| **IMAP** | localhost:11143 | Serwer IMAP proxy |
+| **SMTP** | localhost:11025 | Serwer SMTP proxy |
 
 ### Dane testowe
 
@@ -176,12 +175,58 @@ Test Address: AE:PL-12345-67890-ABCDE-12
 ### Komendy Make
 
 ```bash
+# Komendy lokalne
 make build      # Buduje obrazy
 make up         # Uruchamia kontenery
 make down       # Zatrzymuje kontenery
 make logs       # Pokazuje logi
 make test       # Uruchamia testy
+make status     # Status kontenerów
 make clean      # Czyści zasoby
+
+# Komendy wszystkich usług
+make all-up     # Uruchamia WSZYSTKIE usługi (proxy + sync + dsl)
+make all-down   # Zatrzymuje WSZYSTKIE usługi
+make all-status # Status wszystkich usług
+make e2e-test   # Testy E2E całego systemu
+
+# Komendy innych usług
+make sync-up    # Uruchamia middleware-sync
+make dsl-up     # Uruchamia DSL
+```
+
+### Przykładowe uruchomienie i testy
+
+```bash
+# 1. Uruchom usługę
+make up
+
+# 2. Sprawdź status
+make status
+
+# 3. Sprawdź API w przeglądarce
+open http://localhost:8180/docs
+
+# 4. Zaloguj się do webmaila
+open http://localhost:9080
+# Login: testuser / testpass123
+
+# 5. Test IMAP przez shell
+python3 -c "
+import imaplib
+m = imaplib.IMAP4('localhost', 11143)
+m.login('testuser', 'testpass123')
+m.select('INBOX')
+typ, data = m.search(None, 'ALL')
+print(f'Wiadomości w INBOX: {len(data[0].split())}')
+m.logout()
+"
+
+# 6. Uruchom testy jednostkowe
+make test
+
+# 7. Uruchom testy E2E całego systemu
+make e2e-test
 ```
 
 ### Architektura Docker
@@ -189,15 +234,23 @@ make clean      # Czyści zasoby
 ```
 ┌─────────────────────────────────────────────────────────────┐
 │                    Docker Network                            │
-│                                                             │
-│  ┌─────────────┐    ┌─────────────┐    ┌─────────────┐     │
-│  │  Simulator  │◄───│   Proxy     │◄───│  Webmail    │     │
-│  │  :8080      │    │ IMAP:1143   │    │  :9000      │     │
-│  │             │    │ SMTP:1025   │    │             │     │
-│  └─────────────┘    └─────────────┘    └─────────────┘     │
-│                                                             │
+│                                                              │
+│  ┌─────────────┐    ┌─────────────┐    ┌─────────────┐      │
+│  │  Simulator  │◄───│   Proxy     │◄───│  Webmail    │      │
+│  │  :8180      │    │ IMAP:11143  │    │  :9080      │      │
+│  │  /docs      │    │ SMTP:11025  │    │ (Roundcube) │      │
+│  └─────────────┘    └─────────────┘    └─────────────┘      │
+│                                                              │
 └─────────────────────────────────────────────────────────────┘
 ```
+
+## 🔗 Powiązane usługi
+
+| Usługa | Folder | Porty | Opis |
+|--------|--------|-------|------|
+| **Proxy IMAP/SMTP** | `edoreczenia-proxy-imap-smtp` | 8180, 11143, 11025, 9080 | Ten projekt |
+| **Middleware Sync** | `edoreczenia-middleware-sync` | 8280, 21143, 9180 | Synchronizacja z Dovecot |
+| **DSL** | `edoreczenia-dsl` | 8380, 31143, 31025 | Apache Camel + Python Client |
 
 ## 📄 Licencja
 

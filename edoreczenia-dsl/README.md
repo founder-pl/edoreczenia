@@ -1,222 +1,246 @@
 # e-Doręczenia DSL
 
-DSL (Domain Specific Language) oparty na **Apache Camel** i **Groovy** do obsługi wysyłki i odbioru dokumentów e-Doręczeń.
+DSL (Domain Specific Language) oparty na **Apache Camel**, **Groovy** i **Python** do obsługi wysyłki i odbioru dokumentów e-Doręczeń.
 
-## Architektura
+## 🎯 Funkcjonalności
 
-```
-┌─────────────────────────────────────────────────────────────────────────┐
-│                        e-Doręczenia DSL                                  │
-│                    (Apache Camel + Groovy)                               │
-├─────────────────────────────────────────────────────────────────────────┤
-│                                                                          │
-│  ┌──────────────┐    ┌──────────────┐    ┌──────────────┐               │
-│  │   REST API   │    │  File Watch  │    │    Timer     │               │
-│  │  :8090       │    │   /outbox    │    │  Auto-Sync   │               │
-│  └──────┬───────┘    └──────┬───────┘    └──────┬───────┘               │
-│         │                   │                   │                        │
-│         └───────────────────┼───────────────────┘                        │
-│                             │                                            │
-│                    ┌────────▼────────┐                                   │
-│                    │  Camel Routes   │                                   │
-│                    │  (Groovy DSL)   │                                   │
-│                    └────────┬────────┘                                   │
-│                             │                                            │
-│         ┌───────────────────┼───────────────────┐                        │
-│         │                   │                   │                        │
-│  ┌──────▼───────┐    ┌──────▼───────┐    ┌──────▼───────┐               │
-│  │  API Client  │    │ IMAP Client  │    │ SMTP Client  │               │
-│  │  (HTTP)      │    │ (Dovecot)    │    │ (Proxy)      │               │
-│  └──────┬───────┘    └──────┬───────┘    └──────┬───────┘               │
-│         │                   │                   │                        │
-└─────────┼───────────────────┼───────────────────┼────────────────────────┘
-          │                   │                   │
-          ▼                   ▼                   ▼
-   ┌──────────────┐    ┌──────────────┐    ┌──────────────┐
-   │  Symulator   │    │   Dovecot    │    │ SMTP Proxy   │
-   │  API :8180   │    │   :21143     │    │   :11025     │
-   └──────────────┘    └──────────────┘    └──────────────┘
-```
+- **Python Client** - pełny klient API z logowaniem do Markdown
+- **Groovy DSL** - skrypty Apache Camel do routingu wiadomości
+- **Scenariusze testowe** - automatyczne testy z raportami
+- **Raporty Markdown** - szczegółowe logi w formacie MD
 
-## Szybki start
+## 🐳 Docker
 
-### 1. Uruchomienie z Docker
+### Szybki start
 
 ```bash
-# Budowanie i uruchomienie
+# Uruchomienie
 make up
 
-# Sprawdzenie statusu
-make status
-
-# Logi
-make logs
+# Lub w tle
+docker-compose up -d --build
 ```
 
-### 2. Wysyłanie wiadomości
+### Dostępne usługi
 
-#### Przez REST API:
-```bash
-curl -X POST http://localhost:8090/api/v1/messages \
-  -H 'Content-Type: application/json' \
-  -d '{
-    "subject": "Ważny dokument",
-    "recipient": "AE:PL-ODBIORCA-00001",
-    "content": "Treść wiadomości",
-    "attachments": []
-  }'
-```
-
-#### Przez Groovy DSL:
-```bash
-groovy routes/send-document.groovy \
-  -f dokument.pdf \
-  -r AE:PL-ODBIORCA-00001 \
-  -s "Przesyłam dokument"
-```
-
-#### Przez Makefile:
-```bash
-make send
-```
-
-### 3. Odbieranie wiadomości
-
-#### Przez REST API:
-```bash
-curl http://localhost:8090/api/v1/messages
-```
-
-#### Przez Groovy DSL:
-```bash
-groovy routes/receive-messages.groovy -f inbox -l 10
-```
-
-#### Przez Makefile:
-```bash
-make receive
-```
-
-### 4. Synchronizacja API → IMAP
-
-```bash
-# Przez REST API
-curl -X POST http://localhost:8090/api/v1/sync/to-imap
-
-# Przez Makefile
-make sync
-```
-
-## Dostępne Routes
-
-| Route | Opis |
-|-------|------|
-| `direct:send-message` | Wysyłanie wiadomości przez API |
-| `direct:receive-messages` | Odbieranie wiadomości z API |
-| `direct:get-message` | Pobieranie szczegółów wiadomości |
-| `direct:get-attachment` | Pobieranie załącznika |
-| `direct:sync-to-imap` | Synchronizacja API → Dovecot |
-| `direct:sync-from-imap` | Synchronizacja Dovecot → API |
-| `direct:send-via-smtp` | Wysyłanie przez SMTP Proxy |
-| `direct:receive-via-imap` | Odbieranie przez IMAP Proxy |
-
-## REST API Endpoints
-
-| Metoda | Endpoint | Opis |
+| Usługa | URL/Port | Opis |
 |--------|----------|------|
-| POST | `/api/v1/messages` | Wysyłanie wiadomości |
-| GET | `/api/v1/messages` | Lista wiadomości |
-| GET | `/api/v1/messages/{id}` | Szczegóły wiadomości |
-| POST | `/api/v1/sync/to-imap` | Synchronizacja do IMAP |
-| POST | `/api/v1/sync/from-imap` | Synchronizacja z IMAP |
+| **API Docs** | http://localhost:8380/docs | Swagger dokumentacja API |
+| **IMAP** | localhost:31143 | Dovecot IMAP |
+| **SMTP** | localhost:31025 | SMTP Proxy |
 
-## Konfiguracja
+### Dane testowe
 
-### Zmienne środowiskowe
+```
+IMAP User: mailuser
+IMAP Pass: mailpass123
 
-| Zmienna | Domyślna wartość | Opis |
-|---------|------------------|------|
-| `EDORECZENIA_API_URL` | `http://localhost:8180` | URL API e-Doręczeń |
-| `EDORECZENIA_ADDRESS` | `AE:PL-12345-67890-ABCDE-12` | Adres nadawcy |
-| `EDORECZENIA_CLIENT_ID` | `test_client_id` | Client ID OAuth2 |
-| `EDORECZENIA_CLIENT_SECRET` | `test_client_secret` | Client Secret |
-| `IMAP_HOST` | `localhost` | Host IMAP (Dovecot) |
-| `IMAP_PORT` | `21143` | Port IMAP |
-| `IMAP_USER` | `mailuser` | Użytkownik IMAP |
-| `IMAP_PASSWORD` | `mailpass123` | Hasło IMAP |
-| `SMTP_HOST` | `localhost` | Host SMTP Proxy |
-| `SMTP_PORT` | `11025` | Port SMTP |
-| `AUTO_SYNC` | `false` | Automatyczna synchronizacja |
-| `FILE_WATCH` | `false` | Obserwowanie katalogu /outbox |
+SMTP User: testuser
+SMTP Pass: testpass123
 
-## Funkcje automatyczne
-
-### Auto-Sync (synchronizacja co minutę)
-```bash
-AUTO_SYNC=true docker-compose up -d
+API Client ID: test_client_id
+API Client Secret: test_client_secret
+Test Address: AE:PL-12345-67890-ABCDE-12
 ```
 
-### File Watch (wysyłanie plików z /outbox)
-```bash
-FILE_WATCH=true docker-compose up -d
+### Komendy Make
 
-# Wrzuć plik do wysłania
-cp dokument.pdf outbox/
+```bash
+# Komendy lokalne
+make build      # Buduje obrazy
+make up         # Uruchamia kontenery
+make down       # Zatrzymuje kontenery
+make logs       # Pokazuje logi
+make status     # Status kontenerów
+make clean      # Czyści zasoby
+
+# Komendy wszystkich usług
+make all-up     # Uruchamia WSZYSTKIE usługi (proxy + sync + dsl)
+make all-down   # Zatrzymuje WSZYSTKIE usługi
+make all-status # Status wszystkich usług
+make e2e-test   # Testy E2E całego systemu
+
+# Komendy innych usług
+make proxy-up   # Uruchamia proxy IMAP/SMTP
+make sync-up    # Uruchamia middleware-sync
+
+# Komendy testowe DSL
+make test           # Szybki test DSL
+make test-scenarios # Pełne testy scenariuszowe (raporty MD)
+make send           # Wysyła testową wiadomość
+make receive        # Odbiera wiadomości
+
+# Raporty
+make show-report    # Wyświetl ostatni raport
+make list-reports   # Lista wszystkich raportów
 ```
 
-## Przykłady Groovy DSL
+## 📤 Wysyłanie wiadomości
 
-### Wysyłanie z załącznikiem
-```groovy
-def token = getToken(config)
-def attachment = prepareAttachment(new File('dokument.pdf'))
+### Przez make:
+```bash
+$ make send
+📤 Wysyłanie testowej wiadomości...
+[2025-12-02 14:21:50.062] → [AUTH] Pobieranie tokenu OAuth2 z http://localhost:8380
+[2025-12-02 14:21:50.087] ✓ [AUTH] Token OAuth2 pobrany
+[2025-12-02 14:21:50.087] → [API] Wysyłanie wiadomości do: AE:PL-ODBIORCA-TEST-00001
+[2025-12-02 14:21:50.089] ✓ [API] Wiadomość wysłana
+✅ Wysłano: msg-d21880e2 [SENT]
+```
 
-sendMessage(config, token, 
-    'AE:PL-ODBIORCA-00001',
-    'Ważny dokument',
-    'W załączeniu przesyłam dokument.',
-    [attachment]
+### Przez Python Client:
+```python
+from python_client.client import EDoreczeniaClient
+
+client = EDoreczeniaClient()
+client.authenticate()
+result = client.send_message(
+    recipient='AE:PL-ODBIORCA-00001',
+    subject='Ważny dokument',
+    content='Treść wiadomości'
 )
+print(f"Wysłano: {result['messageId']}")
 ```
 
-### Odbieranie i przetwarzanie
-```groovy
-def token = getToken(config)
-def messages = getMessages(config, token, 'inbox', 50)
+## 📥 Odbieranie wiadomości
 
-messages.each { msg ->
-    println "📧 ${msg.subject} od ${msg.sender?.address}"
-    
-    msg.attachments?.each { att ->
-        println "   📎 ${att.filename}"
-    }
-}
+### Przez make:
+```bash
+$ make receive
+📥 Odbieranie wiadomości...
+[2025-12-02 14:21:56.245] → [AUTH] Pobieranie tokenu OAuth2 z http://localhost:8380
+[2025-12-02 14:21:56.273] ✓ [AUTH] Token OAuth2 pobrany
+[2025-12-02 14:21:56.273] → [API] Pobieranie wiadomości z folderu: inbox
+[2025-12-02 14:21:56.275] ✓ [API] Pobrano 3 wiadomości
+📧 Pobrano 3 wiadomości:
+   • Decyzja administracyjna nr 123/2024 [READ]
+   • Zawiadomienie o terminie rozprawy [READ]
+   • Wezwanie do uzupełnienia dokumentów [RECEIVED]
 ```
 
-## Struktura projektu
+### Przez Python Client:
+```python
+from python_client.client import EDoreczeniaClient
+
+client = EDoreczeniaClient()
+client.authenticate()
+messages = client.get_messages(folder='inbox', limit=10)
+for msg in messages:
+    print(f"📧 {msg['subject']} [{msg['status']}]")
+```
+
+## 🧪 Testy scenariuszowe
+
+### Uruchomienie:
+```bash
+$ make test-scenarios
+🧪 Uruchamianie scenariuszy testowych...
+
+════════════════════════════════════════════════════════════
+  e-Doręczenia DSL - Scenariusze testowe
+════════════════════════════════════════════════════════════
+
+────────────────────────────────────────
+  📋 Health Check
+────────────────────────────────────────
+[2025-12-02 14:18:47.135] → [SCENARIO] Rozpoczęcie: Health Check
+[2025-12-02 14:18:47.146] ✓ [API] API healthy: User Agent API Simulator
+[2025-12-02 14:18:47.146] → [SCENARIO] Zakończenie: Health Check - ✅ PASS
+
+...
+
+════════════════════════════════════════════════════════════
+  PODSUMOWANIE
+════════════════════════════════════════════════════════════
+  ✅ Health Check
+  ✅ OAuth2 Authentication
+  ✅ List Messages
+  ✅ Send Message
+  ✅ Get Message Details
+  ✅ List Directories
+  ✅ Full Flow
+
+  Wynik: 7/7 (100%)
+  Raport: logs/all_scenarios_20251202_141847.md
+════════════════════════════════════════════════════════════
+```
+
+### Raporty Markdown:
+```bash
+# Lista raportów
+$ make list-reports
+📋 Raporty w logs/:
+-rw-rw-r-- 1 tom tom 10441 Dec  2 14:17 logs/all_scenarios_20251202_141756.md
+-rw-rw-r-- 1 tom tom 10441 Dec  2 14:18 logs/all_scenarios_20251202_141847.md
+
+# Wyświetl ostatni raport
+$ make show-report
+```
+
+## 🔍 Weryfikacja w przeglądarce i shell
+
+### Panel webowy API:
+```bash
+open http://localhost:8380/docs
+```
+
+### Test IMAP przez shell:
+```bash
+python3 -c "
+import imaplib
+m = imaplib.IMAP4('localhost', 31143)
+m.login('mailuser', 'mailpass123')
+m.select('INBOX.e-Doreczenia')
+typ, data = m.search(None, 'ALL')
+print(f'Wiadomości: {len(data[0].split())}')
+m.logout()
+"
+```
+
+### Test API przez curl:
+```bash
+# Health check
+curl -s http://localhost:8380/health | python3 -m json.tool
+
+# Token OAuth2
+curl -s -X POST http://localhost:8380/oauth/token \
+  -d "grant_type=client_credentials&client_id=test_client_id&client_secret=test_client_secret" \
+  | python3 -m json.tool
+```
+
+## 📁 Struktura projektu
 
 ```
 edoreczenia-dsl/
-├── build.gradle              # Konfiguracja Gradle
-├── docker-compose.yml        # Docker Compose
-├── Dockerfile                # Obraz Docker
-├── Makefile                  # Komendy make
-├── .env                      # Zmienne środowiskowe
-├── README.md                 # Dokumentacja
-├── routes/                   # Skrypty Groovy DSL
-│   ├── edoreczenia.groovy    # Główne route'y
-│   ├── send-document.groovy  # Wysyłanie dokumentów
-│   └── receive-messages.groovy # Odbieranie wiadomości
-└── src/
-    └── main/
-        ├── groovy/
-        │   └── pl/edoreczenia/dsl/
-        │       ├── EDoreczeniaApp.groovy    # Aplikacja główna
-        │       └── EDoreczeniaRoutes.groovy # Route'y Camel
-        └── resources/
-            └── logback.xml   # Konfiguracja logowania
+├── logs/                     # Raporty Markdown
+│   └── all_scenarios_*.md
+├── python_client/            # Python DSL Client
+│   ├── __init__.py
+│   ├── client.py             # Klient API
+│   ├── config.py             # Konfiguracja z .env
+│   ├── logger.py             # Logger Markdown
+│   ├── scenarios.py          # Scenariusze testowe
+│   └── run_tests.py          # Runner testów
+├── routes/                   # Groovy DSL
+│   ├── edoreczenia.groovy
+│   ├── send-document.groovy
+│   ├── receive-messages.groovy
+│   └── test-dsl.py
+├── src/main/groovy/          # Apache Camel
+├── .env                      # Konfiguracja
+├── docker-compose.yml
+├── Makefile
+└── README.md
 ```
 
-## Licencja
+## 🔗 Powiązane usługi
+
+| Usługa | Folder | Porty | Opis |
+|--------|--------|-------|------|
+| **Proxy IMAP/SMTP** | `edoreczenia-proxy-imap-smtp` | 8180, 11143, 11025, 9080 | Proxy protokołów |
+| **Middleware Sync** | `edoreczenia-middleware-sync` | 8280, 21143, 9180 | Synchronizacja z Dovecot |
+| **DSL** | `edoreczenia-dsl` | 8380, 31143, 31025 | Ten projekt |
+
+## 📄 Licencja
 
 MIT

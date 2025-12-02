@@ -1,0 +1,31 @@
+# Build
+build/
+.gradle/
+*.class
+*.jar
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+.pytest_cache/
+
+# IDE
+.idea/
+*.iml
+.vscode/
+
+# Logs (zachowaj folder, ignoruj pliki)
+logs/*.md
+!logs/.gitkeep
+
+# Docker
+*.log
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Temp
+*.tmp
+*.bak

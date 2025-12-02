@@ -13,6 +13,26 @@ import json
 import urllib.request
 import urllib.parse
 from datetime import datetime
+from pathlib import Path
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# ŁADOWANIE .env
+# ═══════════════════════════════════════════════════════════════════════════
+
+def load_env():
+    """Ładuje zmienne z .env"""
+    env_path = Path(__file__).parent.parent / '.env'
+    if env_path.exists():
+        with open(env_path) as f:
+            for line in f:
+                line = line.strip()
+                if line and not line.startswith('#') and '=' in line:
+                    key, value = line.split('=', 1)
+                    if key not in os.environ:
+                        os.environ[key] = value
+
+load_env()
 
 
 # ═══════════════════════════════════════════════════════════════════════════
@@ -20,7 +40,7 @@ from datetime import datetime
 # ═══════════════════════════════════════════════════════════════════════════
 
 config = {
-    'api_url': os.getenv('EDORECZENIA_API_URL', 'http://localhost:8180'),
+    'api_url': os.getenv('EDORECZENIA_API_URL', 'http://localhost:8380'),
     'address': os.getenv('EDORECZENIA_ADDRESS', 'AE:PL-12345-67890-ABCDE-12'),
     'client_id': os.getenv('EDORECZENIA_CLIENT_ID', 'test_client_id'),
     'client_secret': os.getenv('EDORECZENIA_CLIENT_SECRET', 'test_client_secret'),
