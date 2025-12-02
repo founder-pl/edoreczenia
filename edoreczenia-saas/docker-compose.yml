@@ -1,0 +1,49 @@
+services:
+  # ===========================================
+  # Backend API (FastAPI)
+  # ===========================================
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: edoreczenia-saas-backend
+    ports:
+      - "${BACKEND_PORT:-8000}:8000"
+    environment:
+      PROXY_API_URL: ${PROXY_API_URL:-http://host.docker.internal:8180}
+      SYNC_API_URL: ${SYNC_API_URL:-http://host.docker.internal:8280}
+      DSL_API_URL: ${DSL_API_URL:-http://host.docker.internal:8380}
+      EDORECZENIA_CLIENT_ID: ${EDORECZENIA_CLIENT_ID:-test_client_id}
+      EDORECZENIA_CLIENT_SECRET: ${EDORECZENIA_CLIENT_SECRET:-test_client_secret}
+      JWT_SECRET: ${JWT_SECRET:-super-secret-key-change-in-production}
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - saas-net
+    restart: unless-stopped
+
+  # ===========================================
+  # Frontend (React + Vite)
+  # ===========================================
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: edoreczenia-saas-frontend
+    ports:
+      - "${FRONTEND_PORT:-3000}:80"
+    depends_on:
+      backend:
+        condition: service_healthy
+    networks:
+      - saas-net
+    restart: unless-stopped
+
+networks:
+  saas-net:
+    driver: bridge
