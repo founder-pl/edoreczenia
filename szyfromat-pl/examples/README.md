@@ -1,6 +1,30 @@
-# e-Doręczenia SaaS - Przykłady użycia API
+# Szyfromat.pl (e-Doręczenia SaaS) - Przykłady użycia API i CLI
 
 Ten folder zawiera przykładowe skrypty bash do interakcji z API e-Doręczeń.
+
+## Demo konto
+
+```
+Email: demo@szyfromat.pl
+Hasło: demo123
+Adres ADE: AE:PL-DEMO-USER-1234-01
+```
+
+## CLI (DSL)
+
+```bash
+# Logowanie
+../cli/szyfromat login -u demo@szyfromat.pl -p demo123
+
+# Komendy
+../cli/szyfromat inbox           # Skrzynka odbiorcza
+../cli/szyfromat inbox -f sent   # Wysłane
+../cli/szyfromat send            # Wyślij wiadomość
+../cli/szyfromat read <id>       # Przeczytaj wiadomość
+../cli/szyfromat folders         # Lista folderów
+../cli/szyfromat status          # Status integracji
+../cli/szyfromat whoami          # Info o użytkowniku
+```
 
 ## Wymagania
 

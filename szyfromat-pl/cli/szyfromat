@@ -1,11 +1,11 @@
 #!/bin/bash
 #
-# e-Doręczenia SaaS CLI - Shell Wrapper
-# Użycie: edoreczenia <komenda> [opcje]
+# Szyfromat.pl CLI - Shell Wrapper
+# Użycie: szyfromat <komenda> [opcje]
 #
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-CLI_SCRIPT="$SCRIPT_DIR/edoreczenia-cli.py"
+CLI_SCRIPT="$SCRIPT_DIR/szyfromat-cli.py"
 
 # Sprawdź czy Python jest dostępny
 if ! command -v python3 &> /dev/null; then

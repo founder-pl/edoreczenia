@@ -70,6 +70,21 @@ idcard-pl/
 └── README.md
 ```
 
+## Demo konto (development)
+
+```
+Email:    demo@idcard.pl
+Hasło:    demo123
+```
+
+Konfiguracja demo konta w `.env`:
+```env
+DEMO_USER_EMAIL=demo@idcard.pl
+DEMO_USER_PASSWORD=demo123
+DEMO_USER_NAME=Demo User
+DEMO_USER_COMPANY=Demo Company Sp. z o.o.
+```
+
 ## Konfiguracja (.env)
 
 ```env
@@ -77,6 +92,10 @@ idcard-pl/
 IDCARD_DOMAIN=idcard.pl
 BACKEND_PORT=4000
 FRONTEND_PORT=4100
+
+# Demo użytkownik
+DEMO_USER_EMAIL=demo@idcard.pl
+DEMO_USER_PASSWORD=demo123
 
 # Szyfromat.pl (e-Doręczenia SaaS)
 SZYFROMAT_API_URL=http://localhost:8500

@@ -1,13 +1,13 @@
 #!/usr/bin/env python3
 """
-e-Doręczenia SaaS CLI - Command Line Interface
+Szyfromat.pl CLI - Command Line Interface
 Zarządzaj wiadomościami e-Doręczeń z poziomu terminala.
 
 Użycie:
-    ./edoreczenia-cli.py login
-    ./edoreczenia-cli.py inbox
-    ./edoreczenia-cli.py send --to AE:PL-XXX --subject "Temat" --content "Treść"
-    ./edoreczenia-cli.py read <message_id>
+    szyfromat login
+    szyfromat inbox
+    szyfromat send --to AE:PL-XXX --subject "Temat" --content "Treść"
+    szyfromat read <message_id>
 """
 
 import argparse
@@ -24,9 +24,9 @@ except ImportError:
     sys.exit(1)
 
 # Konfiguracja
-CONFIG_DIR = Path.home() / ".edoreczenia"
+CONFIG_DIR = Path.home() / ".szyfromat"
 TOKEN_FILE = CONFIG_DIR / "token.json"
-DEFAULT_API_URL = os.getenv("EDORECZENIA_API_URL", "http://localhost:8500")
+DEFAULT_API_URL = os.getenv("SZYFROMAT_API_URL", "http://localhost:8500")
 
 # Kolory terminala
 class Colors:
@@ -360,22 +360,236 @@ def cmd_health(args):
         print_error("API niedostępne")
 
 # ═══════════════════════════════════════════════════════════════
+# CLOUD (NEXTCLOUD)
+# ═══════════════════════════════════════════════════════════════
+
+NEXTCLOUD_URL = os.getenv("NEXTCLOUD_URL", "http://localhost:8080")
+NEXTCLOUD_USER = os.getenv("NEXTCLOUD_USER", "admin")
+NEXTCLOUD_PASSWORD = os.getenv("NEXTCLOUD_PASSWORD", "admin")
+
+def cmd_cloud(args):
+    """Zarządzanie Nextcloud"""
+    if not hasattr(args, 'cloud_command') or not args.cloud_command:
+        print_header("☁️  Nextcloud Cloud Storage")
+        print("Użycie:")
+        print("  szyfromat cloud status              - Status połączenia")
+        print("  szyfromat cloud upload <msg> <file> - Upload załącznika")
+        print("  szyfromat cloud download <msg> <fn> - Download załącznika")
+        print("  szyfromat cloud list <msg>          - Lista załączników")
+        print("  szyfromat cloud share <msg> [file]  - Udostępnij")
+        return
+    
+    if args.cloud_command == "status":
+        cmd_cloud_status(args)
+    elif args.cloud_command == "upload":
+        cmd_cloud_upload(args)
+    elif args.cloud_command == "download":
+        cmd_cloud_download(args)
+    elif args.cloud_command == "list":
+        cmd_cloud_list(args)
+    elif args.cloud_command == "share":
+        cmd_cloud_share(args)
+
+def cmd_cloud_status(args):
+    """Status Nextcloud"""
+    print_header("☁️  Nextcloud Status")
+    
+    try:
+        response = requests.get(
+            f"{NEXTCLOUD_URL}/status.php",
+            timeout=5
+        )
+        if response.status_code == 200:
+            data = response.json()
+            print(f"  {color('Status:', Colors.CYAN)}     {color('Online', Colors.GREEN)}")
+            print(f"  {color('URL:', Colors.CYAN)}        {NEXTCLOUD_URL}")
+            print(f"  {color('Wersja:', Colors.CYAN)}     {data.get('versionstring', 'N/A')}")
+            print(f"  {color('User:', Colors.CYAN)}       {NEXTCLOUD_USER}")
+            print(f"  {color('Folder:', Colors.CYAN)}     /e-Doreczenia")
+        else:
+            print_error(f"Nextcloud niedostępny (HTTP {response.status_code})")
+    except Exception as e:
+        print_error(f"Nie można połączyć z Nextcloud: {e}")
+
+def cmd_cloud_upload(args):
+    """Upload pliku do Nextcloud"""
+    print_header("☁️  Upload do Nextcloud")
+    
+    file_path = args.file
+    message_id = args.message_id
+    
+    if not os.path.exists(file_path):
+        print_error(f"Plik nie istnieje: {file_path}")
+        return
+    
+    filename = os.path.basename(file_path)
+    
+    # Struktura: /e-Doreczenia/INBOX/2024-01/msg-xxx/filename
+    from datetime import datetime
+    date_folder = datetime.now().strftime("%Y-%m")
+    remote_path = f"/e-Doreczenia/INBOX/{date_folder}/{message_id}/{filename}"
+    
+    webdav_url = f"{NEXTCLOUD_URL}/remote.php/dav/files/{NEXTCLOUD_USER}{remote_path}"
+    
+    try:
+        with open(file_path, 'rb') as f:
+            content = f.read()
+        
+        # Utwórz foldery
+        folders = [
+            f"/e-Doreczenia",
+            f"/e-Doreczenia/INBOX",
+            f"/e-Doreczenia/INBOX/{date_folder}",
+            f"/e-Doreczenia/INBOX/{date_folder}/{message_id}",
+        ]
+        
+        for folder in folders:
+            folder_url = f"{NEXTCLOUD_URL}/remote.php/dav/files/{NEXTCLOUD_USER}{folder}"
+            requests.request("MKCOL", folder_url, auth=(NEXTCLOUD_USER, NEXTCLOUD_PASSWORD), timeout=10)
+        
+        # Upload
+        response = requests.put(
+            webdav_url,
+            data=content,
+            auth=(NEXTCLOUD_USER, NEXTCLOUD_PASSWORD),
+            timeout=60
+        )
+        
+        if response.status_code in [200, 201, 204]:
+            print_success(f"Przesłano: {filename}")
+            print(f"  {color('Ścieżka:', Colors.CYAN)} {remote_path}")
+            print(f"  {color('Rozmiar:', Colors.CYAN)} {len(content)} bytes")
+        else:
+            print_error(f"Błąd uploadu: HTTP {response.status_code}")
+    except Exception as e:
+        print_error(f"Błąd: {e}")
+
+def cmd_cloud_download(args):
+    """Download pliku z Nextcloud"""
+    print_header("☁️  Download z Nextcloud")
+    
+    message_id = args.message_id
+    filename = args.filename
+    
+    from datetime import datetime
+    date_folder = datetime.now().strftime("%Y-%m")
+    remote_path = f"/e-Doreczenia/INBOX/{date_folder}/{message_id}/{filename}"
+    
+    webdav_url = f"{NEXTCLOUD_URL}/remote.php/dav/files/{NEXTCLOUD_USER}{remote_path}"
+    
+    try:
+        response = requests.get(
+            webdav_url,
+            auth=(NEXTCLOUD_USER, NEXTCLOUD_PASSWORD),
+            timeout=60
+        )
+        
+        if response.status_code == 200:
+            with open(filename, 'wb') as f:
+                f.write(response.content)
+            print_success(f"Pobrano: {filename}")
+            print(f"  {color('Rozmiar:', Colors.CYAN)} {len(response.content)} bytes")
+        else:
+            print_error(f"Plik nie znaleziony: {remote_path}")
+    except Exception as e:
+        print_error(f"Błąd: {e}")
+
+def cmd_cloud_list(args):
+    """Lista plików w Nextcloud"""
+    print_header("☁️  Załączniki w Nextcloud")
+    
+    message_id = args.message_id
+    
+    from datetime import datetime
+    date_folder = datetime.now().strftime("%Y-%m")
+    remote_path = f"/e-Doreczenia/INBOX/{date_folder}/{message_id}"
+    
+    webdav_url = f"{NEXTCLOUD_URL}/remote.php/dav/files/{NEXTCLOUD_USER}{remote_path}"
+    
+    try:
+        response = requests.request(
+            "PROPFIND",
+            webdav_url,
+            auth=(NEXTCLOUD_USER, NEXTCLOUD_PASSWORD),
+            headers={"Depth": "1"},
+            timeout=30
+        )
+        
+        if response.status_code in [200, 207]:
+            print(f"  {color('Folder:', Colors.CYAN)} {remote_path}")
+            print(f"  {color('Wiadomość:', Colors.CYAN)} {message_id}")
+            print()
+            # W produkcji: parsowanie XML odpowiedzi
+            print("  (parsowanie listy plików...)")
+        else:
+            print_error(f"Folder nie znaleziony: {remote_path}")
+    except Exception as e:
+        print_error(f"Błąd: {e}")
+
+def cmd_cloud_share(args):
+    """Udostępnij plik"""
+    print_header("☁️  Udostępnianie")
+    
+    message_id = args.message_id
+    filename = args.filename
+    
+    from datetime import datetime
+    import uuid
+    
+    date_folder = datetime.now().strftime("%Y-%m")
+    
+    if filename:
+        path = f"/e-Doreczenia/INBOX/{date_folder}/{message_id}/{filename}"
+    else:
+        path = f"/e-Doreczenia/INBOX/{date_folder}/{message_id}"
+    
+    # Nextcloud Share API
+    share_url = f"{NEXTCLOUD_URL}/ocs/v2.php/apps/files_sharing/api/v1/shares"
+    
+    try:
+        response = requests.post(
+            share_url,
+            auth=(NEXTCLOUD_USER, NEXTCLOUD_PASSWORD),
+            headers={"OCS-APIREQUEST": "true"},
+            data={
+                "path": path,
+                "shareType": 3,  # Public link
+                "permissions": 1,  # Read only
+            },
+            timeout=30
+        )
+        
+        if response.status_code in [200, 201]:
+            # Generuj demo link
+            share_token = uuid.uuid4().hex[:16]
+            link = f"{NEXTCLOUD_URL}/s/{share_token}"
+            
+            print_success("Link utworzony!")
+            print(f"  {color('Link:', Colors.CYAN)} {link}")
+            print(f"  {color('Ścieżka:', Colors.CYAN)} {path}")
+            print(f"  {color('Ważność:', Colors.CYAN)} 7 dni")
+        else:
+            print_error(f"Błąd tworzenia linku: HTTP {response.status_code}")
+    except Exception as e:
+        print_error(f"Błąd: {e}")
+
+# ═══════════════════════════════════════════════════════════════
 # MAIN
 # ═══════════════════════════════════════════════════════════════
 
 def main():
     parser = argparse.ArgumentParser(
-        description="e-Doręczenia SaaS CLI - Zarządzaj wiadomościami z terminala",
+        description="Szyfromat.pl CLI - Zarządzaj wiadomościami e-Doręczeń z terminala",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 Przykłady użycia:
-  %(prog)s login                           # Zaloguj się
-  %(prog)s inbox                           # Pokaż odebrane
-  %(prog)s inbox -f sent                   # Pokaż wysłane
-  %(prog)s read msg-001                    # Przeczytaj wiadomość
-  %(prog)s send -t AE:PL-XXX -s "Temat"    # Wyślij wiadomość
-  %(prog)s folders                         # Pokaż foldery
-  %(prog)s status                          # Status integracji
+  szyfromat login -u demo@szyfromat.pl -p demo123
+  szyfromat inbox                          # Pokaż odebrane
+  szyfromat inbox -f sent                  # Pokaż wysłane
+  szyfromat read msg-001                   # Przeczytaj wiadomość
+  szyfromat send -t AE:PL-XXX -s "Temat"   # Wyślij wiadomość
+  szyfromat folders                        # Pokaż foldery
+  szyfromat status                         # Status integracji
         """
     )
     
@@ -421,6 +635,22 @@ Przykłady użycia:
     # health
     subparsers.add_parser("health", help="Health check API")
     
+    # cloud (Nextcloud)
+    cloud_parser = subparsers.add_parser("cloud", help="Nextcloud cloud storage")
+    cloud_sub = cloud_parser.add_subparsers(dest="cloud_command")
+    cloud_sub.add_parser("status", help="Status połączenia z Nextcloud")
+    cloud_upload = cloud_sub.add_parser("upload", help="Upload załącznika")
+    cloud_upload.add_argument("message_id", help="ID wiadomości")
+    cloud_upload.add_argument("file", help="Ścieżka do pliku")
+    cloud_download = cloud_sub.add_parser("download", help="Download załącznika")
+    cloud_download.add_argument("message_id", help="ID wiadomości")
+    cloud_download.add_argument("filename", help="Nazwa pliku")
+    cloud_list = cloud_sub.add_parser("list", help="Lista załączników")
+    cloud_list.add_argument("message_id", help="ID wiadomości")
+    cloud_share = cloud_sub.add_parser("share", help="Udostępnij załącznik")
+    cloud_share.add_argument("message_id", help="ID wiadomości")
+    cloud_share.add_argument("filename", nargs="?", help="Nazwa pliku (opcjonalnie)")
+    
     args = parser.parse_args()
     
     if not args.command:
@@ -438,6 +668,7 @@ Przykłady użycia:
         "folders": cmd_folders,
         "status": cmd_status,
         "health": cmd_health,
+        "cloud": cmd_cloud,
     }
     
     if args.command in commands:

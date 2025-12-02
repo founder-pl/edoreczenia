@@ -1,4 +1,31 @@
-# IDCard.pl - Przykłady użycia API
+# IDCard.pl - Przykłady użycia API i CLI
+
+## Demo konto
+
+```
+Email: demo@idcard.pl
+Hasło: demo123
+```
+
+## CLI (DSL)
+
+```bash
+# Instalacja
+chmod +x ../cli/idcard
+
+# Logowanie
+../cli/idcard login -u demo@idcard.pl -p demo123
+
+# Komendy
+../cli/idcard services          # Lista usług
+../cli/idcard connections       # Twoje połączenia
+../cli/idcard connect edoreczenia --address "AE:PL-..."
+../cli/idcard inbox             # Zunifikowana skrzynka
+../cli/idcard dashboard         # Dashboard
+../cli/idcard notifications     # Powiadomienia
+../cli/idcard whoami            # Info o użytkowniku
+../cli/idcard logout            # Wyloguj
+```
 
 ## Szybki start
 
