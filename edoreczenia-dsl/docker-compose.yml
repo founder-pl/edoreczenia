@@ -1,0 +1,115 @@
+services:
+  # ===========================================
+  # e-Doręczenia DSL (Apache Camel + Groovy)
+  # ===========================================
+  edoreczenia-dsl:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: edoreczenia-dsl
+    ports:
+      - "${DSL_PORT:-8090}:8090"
+    environment:
+      # API e-Doręczeń (Symulator)
+      EDORECZENIA_API_URL: http://edoreczenia-simulator:8080
+      EDORECZENIA_ADDRESS: ${EDORECZENIA_ADDRESS:-AE:PL-12345-67890-ABCDE-12}
+      EDORECZENIA_CLIENT_ID: ${EDORECZENIA_CLIENT_ID:-test_client_id}
+      EDORECZENIA_CLIENT_SECRET: ${EDORECZENIA_CLIENT_SECRET:-test_client_secret}
+      
+      # IMAP (Dovecot - synchronizacja)
+      IMAP_HOST: dovecot
+      IMAP_PORT: "143"
+      IMAP_USER: ${IMAP_USER:-mailuser}
+      IMAP_PASSWORD: ${IMAP_PASSWORD:-mailpass123}
+      
+      # SMTP Proxy
+      SMTP_HOST: edoreczenia-proxy
+      SMTP_PORT: "1025"
+      SMTP_USER: ${SMTP_USER:-testuser}
+      SMTP_PASSWORD: ${SMTP_PASSWORD:-testpass123}
+      
+      # Funkcje
+      AUTO_SYNC: ${AUTO_SYNC:-false}
+      FILE_WATCH: ${FILE_WATCH:-false}
+    volumes:
+      - ./outbox:/app/outbox
+      - ./inbox:/app/inbox
+      - ./processed:/app/processed
+    depends_on:
+      - edoreczenia-simulator
+    networks:
+      - edoreczenia-net
+    restart: unless-stopped
+
+  # ===========================================
+  # Symulator API e-Doręczeń
+  # ===========================================
+  edoreczenia-simulator:
+    build:
+      context: ../edoreczenia-proxy-imap-smtp/simulator
+      dockerfile: Dockerfile
+    container_name: edoreczenia-dsl-simulator
+    ports:
+      - "${SIMULATOR_PORT:-8180}:8080"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - edoreczenia-net
+    restart: unless-stopped
+
+  # ===========================================
+  # Dovecot IMAP (dla synchronizacji)
+  # ===========================================
+  dovecot:
+    build:
+      context: ../edoreczenia-middleware-sync/dovecot
+      dockerfile: Dockerfile
+    container_name: edoreczenia-dsl-dovecot
+    ports:
+      - "${DOVECOT_PORT:-21143}:143"
+    volumes:
+      - maildir-data:/home/mailuser/Maildir
+    healthcheck:
+      test: ["CMD", "nc", "-z", "localhost", "143"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    networks:
+      - edoreczenia-net
+    restart: unless-stopped
+
+  # ===========================================
+  # Proxy IMAP/SMTP (opcjonalnie)
+  # ===========================================
+  edoreczenia-proxy:
+    build:
+      context: ../edoreczenia-proxy-imap-smtp
+      dockerfile: Dockerfile
+    container_name: edoreczenia-dsl-proxy
+    ports:
+      - "${PROXY_IMAP_PORT:-11143}:1143"
+      - "${PROXY_SMTP_PORT:-11025}:1025"
+    environment:
+      EDORECZENIA_TOKEN_URL: http://edoreczenia-simulator:8080/oauth/token
+      EDORECZENIA_API_BASE_URL: http://edoreczenia-simulator:8080/ua/v5
+      EDORECZENIA_CLIENT_ID: ${EDORECZENIA_CLIENT_ID:-test_client_id}
+      EDORECZENIA_CLIENT_SECRET: ${EDORECZENIA_CLIENT_SECRET:-test_client_secret}
+      EDORECZENIA_ADDRESS: ${EDORECZENIA_ADDRESS:-AE:PL-12345-67890-ABCDE-12}
+      LOCAL_AUTH_USERNAME: ${SMTP_USER:-testuser}
+      LOCAL_AUTH_PASSWORD: ${SMTP_PASSWORD:-testpass123}
+    depends_on:
+      edoreczenia-simulator:
+        condition: service_healthy
+    networks:
+      - edoreczenia-net
+    restart: unless-stopped
+
+networks:
+  edoreczenia-net:
+    driver: bridge
+
+volumes:
+  maildir-data:

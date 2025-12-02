@@ -1,0 +1,64 @@
+plugins {
+    id 'groovy'
+    id 'application'
+}
+
+group = 'pl.edoreczenia'
+version = '1.0.0'
+
+java {
+    sourceCompatibility = JavaVersion.VERSION_17
+    targetCompatibility = JavaVersion.VERSION_17
+}
+
+repositories {
+    mavenCentral()
+}
+
+dependencies {
+    // Apache Camel
+    implementation 'org.apache.camel:camel-core:4.4.0'
+    implementation 'org.apache.camel:camel-main:4.4.0'
+    implementation 'org.apache.camel:camel-groovy-dsl:4.4.0'
+    implementation 'org.apache.camel:camel-yaml-dsl:4.4.0'
+    implementation 'org.apache.camel:camel-http:4.4.0'
+    implementation 'org.apache.camel:camel-jackson:4.4.0'
+    implementation 'org.apache.camel:camel-mail:4.4.0'
+    implementation 'org.apache.camel:camel-file:4.4.0'
+    implementation 'org.apache.camel:camel-direct:4.4.0'
+    implementation 'org.apache.camel:camel-bean:4.4.0'
+    implementation 'org.apache.camel:camel-log:4.4.0'
+    
+    // Groovy
+    implementation 'org.apache.groovy:groovy-all:4.0.18'
+    
+    // JSON
+    implementation 'com.fasterxml.jackson.core:jackson-databind:2.16.1'
+    implementation 'com.fasterxml.jackson.datatype:jackson-datatype-jsr310:2.16.1'
+    
+    // Logging
+    implementation 'org.slf4j:slf4j-api:2.0.11'
+    implementation 'ch.qos.logback:logback-classic:1.4.14'
+    
+    // Testing
+    testImplementation 'org.apache.camel:camel-test-junit5:4.4.0'
+    testImplementation 'org.junit.jupiter:junit-jupiter:5.10.1'
+}
+
+application {
+    mainClass = 'pl.edoreczenia.dsl.EDoreczeniaApp'
+}
+
+test {
+    useJUnitPlatform()
+}
+
+jar {
+    manifest {
+        attributes 'Main-Class': 'pl.edoreczenia.dsl.EDoreczeniaApp'
+    }
+    from {
+        configurations.runtimeClasspath.collect { it.isDirectory() ? it : zipTree(it) }
+    }
+    duplicatesStrategy = DuplicatesStrategy.EXCLUDE
+}
