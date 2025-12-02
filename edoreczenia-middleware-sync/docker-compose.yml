@@ -1,5 +1,3 @@
-version: '3.8'
-
 services:
   # ===========================================
   # Symulator API e-Doręczeń
@@ -8,16 +6,16 @@ services:
     build:
       context: ./simulator
       dockerfile: Dockerfile
-    container_name: edoreczenia-simulator
+    container_name: edoreczenia-sync-simulator
     ports:
-      - "8080:8080"
+      - "${SIMULATOR_PORT:-8280}:8080"
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
       interval: 10s
       timeout: 5s
       retries: 5
     networks:
-      - edoreczenia-net
+      - edoreczenia-sync-net
     restart: unless-stopped
 
   # ===========================================
@@ -29,7 +27,7 @@ services:
       dockerfile: Dockerfile
     container_name: edoreczenia-dovecot
     ports:
-      - "1143:143"    # IMAP
+      - "${DOVECOT_PORT:-21143}:143"
     healthcheck:
       test: ["CMD-SHELL", "nc -z localhost 143 || exit 1"]
       interval: 10s
@@ -38,7 +36,7 @@ services:
     volumes:
       - maildir-data:/home/mailuser/Maildir
     networks:
-      - edoreczenia-net
+      - edoreczenia-sync-net
     restart: unless-stopped
 
   # ===========================================
@@ -50,38 +48,31 @@ services:
       dockerfile: Dockerfile
     container_name: edoreczenia-sync
     environment:
-      # API e-Doręczeń (symulator)
-      - EDORECZENIA_CLIENT_ID=test_client_id
-      - EDORECZENIA_CLIENT_SECRET=test_client_secret
-      - EDORECZENIA_TOKEN_URL=http://edoreczenia-simulator:8080/oauth/token
-      - EDORECZENIA_API_BASE_URL=http://edoreczenia-simulator:8080/ua/v5
-      - EDORECZENIA_ADDRESS=AE:PL-12345-67890-ABCDE-12
-      # Lokalny serwer IMAP
-      - TARGET_IMAP_HOST=dovecot
-      - TARGET_IMAP_PORT=143
-      - TARGET_IMAP_SSL=false
-      - TARGET_IMAP_USERNAME=mailuser
-      - TARGET_IMAP_PASSWORD=mailpass123
-      # Lokalny serwer SMTP (używamy Dovecot LMTP)
-      - TARGET_SMTP_HOST=dovecot
-      - TARGET_SMTP_PORT=24
-      - TARGET_SMTP_SSL=false
-      - TARGET_SMTP_USERNAME=mailuser
-      - TARGET_SMTP_PASSWORD=mailpass123
-      # Synchronizacja
-      - SYNC_INTERVAL_MINUTES=1
-      - SYNC_BATCH_SIZE=50
-      - SYNC_DIRECTION=bidirectional
-      # Foldery
-      - FOLDER_MAPPING_INBOX=INBOX.e-Doreczenia
-      - FOLDER_MAPPING_SENT=Sent.e-Doreczenia
-      - FOLDER_MAPPING_OUTBOX=e-Doreczenia-Wyslij
-      # Baza danych
-      - DATABASE_URL=sqlite:///data/sync_state.db
-      # Logowanie
-      - LOG_LEVEL=DEBUG
-      - LOG_FORMAT=text
-      - DEBUG=true
+      EDORECZENIA_CLIENT_ID: ${EDORECZENIA_CLIENT_ID}
+      EDORECZENIA_CLIENT_SECRET: ${EDORECZENIA_CLIENT_SECRET}
+      EDORECZENIA_TOKEN_URL: ${EDORECZENIA_TOKEN_URL}
+      EDORECZENIA_API_BASE_URL: ${EDORECZENIA_API_BASE_URL}
+      EDORECZENIA_ADDRESS: ${EDORECZENIA_ADDRESS}
+      TARGET_IMAP_HOST: ${TARGET_IMAP_HOST}
+      TARGET_IMAP_PORT: ${TARGET_IMAP_PORT}
+      TARGET_IMAP_SSL: ${TARGET_IMAP_SSL}
+      TARGET_IMAP_USERNAME: ${TARGET_IMAP_USERNAME}
+      TARGET_IMAP_PASSWORD: ${TARGET_IMAP_PASSWORD}
+      TARGET_SMTP_HOST: ${TARGET_SMTP_HOST}
+      TARGET_SMTP_PORT: ${TARGET_SMTP_PORT}
+      TARGET_SMTP_SSL: ${TARGET_SMTP_SSL}
+      TARGET_SMTP_USERNAME: ${TARGET_SMTP_USERNAME}
+      TARGET_SMTP_PASSWORD: ${TARGET_SMTP_PASSWORD}
+      SYNC_INTERVAL_MINUTES: ${SYNC_INTERVAL_MINUTES}
+      SYNC_BATCH_SIZE: ${SYNC_BATCH_SIZE}
+      SYNC_DIRECTION: ${SYNC_DIRECTION}
+      FOLDER_MAPPING_INBOX: ${FOLDER_MAPPING_INBOX}
+      FOLDER_MAPPING_SENT: ${FOLDER_MAPPING_SENT}
+      FOLDER_MAPPING_OUTBOX: ${FOLDER_MAPPING_OUTBOX}
+      DATABASE_URL: ${DATABASE_URL}
+      LOG_LEVEL: ${LOG_LEVEL}
+      LOG_FORMAT: ${LOG_FORMAT}
+      DEBUG: ${DEBUG}
     volumes:
       - sync-data:/app/data
     depends_on:
@@ -90,7 +81,7 @@ services:
       dovecot:
         condition: service_healthy
     networks:
-      - edoreczenia-net
+      - edoreczenia-sync-net
     restart: unless-stopped
 
   # ===========================================
@@ -98,9 +89,9 @@ services:
   # ===========================================
   webmail:
     image: roundcube/roundcubemail:latest
-    container_name: edoreczenia-webmail
+    container_name: edoreczenia-sync-webmail
     ports:
-      - "9000:80"
+      - "${WEBMAIL_PORT:-9180}:80"
     environment:
       - ROUNDCUBEMAIL_DEFAULT_HOST=dovecot
       - ROUNDCUBEMAIL_DEFAULT_PORT=143
@@ -111,21 +102,8 @@ services:
       dovecot:
         condition: service_healthy
     networks:
-      - edoreczenia-net
+      - edoreczenia-sync-net
     restart: unless-stopped
-
-  # ===========================================
-  # Adminer - Database viewer
-  # ===========================================
-  adminer:
-    image: adminer:latest
-    container_name: edoreczenia-adminer
-    ports:
-      - "9001:8080"
-    networks:
-      - edoreczenia-net
-    profiles:
-      - debug
 
   # ===========================================
   # Test Runner
@@ -137,34 +115,36 @@ services:
     container_name: edoreczenia-sync-tests
     command: pytest tests/ -v --tb=short
     environment:
-      - EDORECZENIA_CLIENT_ID=test_client_id
-      - EDORECZENIA_CLIENT_SECRET=test_client_secret
-      - EDORECZENIA_TOKEN_URL=http://edoreczenia-simulator:8080/oauth/token
-      - EDORECZENIA_API_BASE_URL=http://edoreczenia-simulator:8080/ua/v5
-      - EDORECZENIA_ADDRESS=AE:PL-12345-67890-ABCDE-12
-      - TARGET_IMAP_HOST=dovecot
-      - TARGET_IMAP_PORT=143
-      - TARGET_IMAP_SSL=false
-      - TARGET_IMAP_USERNAME=mailuser
-      - TARGET_IMAP_PASSWORD=mailpass123
-      - TARGET_SMTP_HOST=dovecot
-      - TARGET_SMTP_PORT=24
-      - TARGET_SMTP_SSL=false
-      - TARGET_SMTP_USERNAME=mailuser
-      - TARGET_SMTP_PASSWORD=mailpass123
-      - DATABASE_URL=sqlite:///:memory:
+      EDORECZENIA_CLIENT_ID: ${EDORECZENIA_CLIENT_ID}
+      EDORECZENIA_CLIENT_SECRET: ${EDORECZENIA_CLIENT_SECRET}
+      EDORECZENIA_TOKEN_URL: ${EDORECZENIA_TOKEN_URL}
+      EDORECZENIA_API_BASE_URL: ${EDORECZENIA_API_BASE_URL}
+      EDORECZENIA_ADDRESS: ${EDORECZENIA_ADDRESS}
+      TARGET_IMAP_HOST: ${TARGET_IMAP_HOST}
+      TARGET_IMAP_PORT: ${TARGET_IMAP_PORT}
+      TARGET_IMAP_SSL: ${TARGET_IMAP_SSL}
+      TARGET_IMAP_USERNAME: ${TARGET_IMAP_USERNAME}
+      TARGET_IMAP_PASSWORD: ${TARGET_IMAP_PASSWORD}
+      TARGET_SMTP_HOST: ${TARGET_SMTP_HOST}
+      TARGET_SMTP_PORT: ${TARGET_SMTP_PORT}
+      TARGET_SMTP_SSL: ${TARGET_SMTP_SSL}
+      TARGET_SMTP_USERNAME: ${TARGET_SMTP_USERNAME}
+      TARGET_SMTP_PASSWORD: ${TARGET_SMTP_PASSWORD}
+      DATABASE_URL: "sqlite:///:memory:"
+      LOG_LEVEL: DEBUG
+      LOG_FORMAT: text
     depends_on:
       edoreczenia-simulator:
         condition: service_healthy
       dovecot:
         condition: service_healthy
     networks:
-      - edoreczenia-net
+      - edoreczenia-sync-net
     profiles:
       - test
 
 networks:
-  edoreczenia-net:
+  edoreczenia-sync-net:
     driver: bridge
 
 volumes:
