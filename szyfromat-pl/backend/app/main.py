@@ -27,6 +27,7 @@ from .database import init_db, get_db
 from .services.message_service import message_service
 from .services.integration_service import integration_service
 from .services.user_service import user_service
+from .services.mailbox_connector import mailbox_connector, MailboxConnection
 
 # CQRS imports
 from .cqrs.commands import (
@@ -171,6 +172,59 @@ class IntegrationCredentials(BaseModel):
     certificate_thumbprint: Optional[str] = None
     api_key: Optional[str] = None
     expires_at: Optional[datetime] = None
+
+# ═══════════════════════════════════════════════════════════════
+# MAILBOX CONNECTION MODELS
+# ═══════════════════════════════════════════════════════════════
+
+class MailboxConnectionRequest(BaseModel):
+    """Request do utworzenia połączenia ze skrzynką"""
+    ade_address: str = Field(..., description="Adres e-Doręczeń (AE:PL-...)")
+    connection_method: str = Field(default="oauth2", description="Metoda: oauth2, certificate, mobywatel, api_key")
+    mailbox_name: Optional[str] = Field(None, description="Nazwa skrzynki")
+    mailbox_type: str = Field(default="person", description="Typ: person, company, public_entity")
+
+class MailboxConnectionResponse(BaseModel):
+    """Odpowiedź z danymi połączenia"""
+    id: str
+    ade_address: str
+    mailbox_name: Optional[str]
+    mailbox_type: str
+    connection_method: str
+    status: str
+    sync_enabled: bool = True
+    messages_synced: int = 0
+    last_sync_at: Optional[datetime] = None
+    next_sync_at: Optional[datetime] = None
+    connected_at: Optional[datetime] = None
+    created_at: Optional[datetime] = None
+    last_error: Optional[str] = None
+
+class OAuthAuthorizationResponse(BaseModel):
+    """Odpowiedź z URL do autoryzacji OAuth"""
+    authorization_url: str
+    state: str
+    instructions: List[str]
+
+class CertificateConnectionRequest(BaseModel):
+    """Request do połączenia przez certyfikat"""
+    certificate_data: str = Field(..., description="Certyfikat w Base64")
+    certificate_password: Optional[str] = Field(None, description="Hasło do certyfikatu")
+
+class MobywatelAuthResponse(BaseModel):
+    """Odpowiedź z danymi do uwierzytelnienia mObywatel"""
+    auth_code: str
+    qr_code_url: str
+    deep_link: str
+    expires_in_seconds: int
+    instructions: List[str]
+
+class ApiCredentialsResponse(BaseModel):
+    """Odpowiedź z wygenerowanymi poświadczeniami API"""
+    api_key: str
+    api_secret: str
+    warning: str
+    usage: dict
 
 # In-memory storage for integrations (w produkcji: baza danych)
 address_integrations = {}
@@ -854,6 +908,247 @@ async def get_integration_credentials(
         raise HTTPException(status_code=400, detail="Integracja nie jest aktywna lub nie istnieje")
     
     return IntegrationCredentials(**credentials)
+
+
+# ═══════════════════════════════════════════════════════════════
+# MAILBOX CONNECTION ENDPOINTS - Integracja istniejących skrzynek
+# ═══════════════════════════════════════════════════════════════
+
+@app.get("/api/mailbox/connections", response_model=List[MailboxConnectionResponse])
+async def list_mailbox_connections(token_data: dict = Depends(verify_jwt_token)):
+    """Lista połączonych skrzynek e-Doręczeń"""
+    user_id = token_data["sub"]
+    connections = mailbox_connector.get_connections(user_id)
+    return [
+        MailboxConnectionResponse(**mailbox_connector.to_response_dict(c))
+        for c in connections
+    ]
+
+
+@app.post("/api/mailbox/connections", response_model=MailboxConnectionResponse)
+async def create_mailbox_connection(
+    request: MailboxConnectionRequest,
+    token_data: dict = Depends(verify_jwt_token)
+):
+    """Utwórz nowe połączenie ze skrzynką e-Doręczeń"""
+    user_id = token_data["sub"]
+    
+    # Walidacja adresu
+    if not request.ade_address.startswith("AE:PL-"):
+        raise HTTPException(
+            status_code=400,
+            detail="Nieprawidłowy format adresu. Powinien zaczynać się od 'AE:PL-'"
+        )
+    
+    try:
+        connection = mailbox_connector.create_connection(
+            user_id=user_id,
+            ade_address=request.ade_address,
+            connection_method=request.connection_method,
+            mailbox_name=request.mailbox_name,
+            mailbox_type=request.mailbox_type
+        )
+        return MailboxConnectionResponse(**mailbox_connector.to_response_dict(connection))
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@app.get("/api/mailbox/connections/{connection_id}", response_model=MailboxConnectionResponse)
+async def get_mailbox_connection(
+    connection_id: str,
+    token_data: dict = Depends(verify_jwt_token)
+):
+    """Pobierz szczegóły połączenia"""
+    connection = mailbox_connector.get_connection(connection_id)
+    if not connection:
+        raise HTTPException(status_code=404, detail="Połączenie nie znalezione")
+    return MailboxConnectionResponse(**mailbox_connector.to_response_dict(connection))
+
+
+@app.post("/api/mailbox/connections/{connection_id}/oauth/authorize", response_model=OAuthAuthorizationResponse)
+async def get_oauth_authorization(
+    connection_id: str,
+    redirect_uri: str = "http://localhost:3500/callback",
+    token_data: dict = Depends(verify_jwt_token)
+):
+    """Pobierz URL do autoryzacji OAuth2 (oficjalne API e-Doręczeń)"""
+    connection = mailbox_connector.get_connection(connection_id)
+    if not connection:
+        raise HTTPException(status_code=404, detail="Połączenie nie znalezione")
+    
+    result = mailbox_connector.get_oauth_authorization_url(connection_id, redirect_uri)
+    return OAuthAuthorizationResponse(**result)
+
+
+@app.post("/api/mailbox/connections/{connection_id}/oauth/callback")
+async def oauth_callback(
+    connection_id: str,
+    code: str,
+    token_data: dict = Depends(verify_jwt_token)
+):
+    """Callback OAuth2 - wymień kod na tokeny"""
+    try:
+        connection = mailbox_connector.complete_oauth_authorization(connection_id, code)
+        return {
+            "status": "connected",
+            "message": "Autoryzacja OAuth2 zakończona pomyślnie",
+            "connection": mailbox_connector.to_response_dict(connection)
+        }
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@app.post("/api/mailbox/connections/{connection_id}/certificate")
+async def connect_with_certificate(
+    connection_id: str,
+    request: CertificateConnectionRequest,
+    token_data: dict = Depends(verify_jwt_token)
+):
+    """Połącz używając certyfikatu kwalifikowanego"""
+    try:
+        result = mailbox_connector.connect_with_certificate(
+            connection_id,
+            request.certificate_data,
+            request.certificate_password
+        )
+        return result
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@app.post("/api/mailbox/connections/{connection_id}/mobywatel/initiate", response_model=MobywatelAuthResponse)
+async def initiate_mobywatel_auth(
+    connection_id: str,
+    token_data: dict = Depends(verify_jwt_token)
+):
+    """Rozpocznij uwierzytelnienie przez mObywatel"""
+    try:
+        result = mailbox_connector.initiate_mobywatel_auth(connection_id)
+        return MobywatelAuthResponse(**result)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@app.post("/api/mailbox/connections/{connection_id}/mobywatel/verify")
+async def verify_mobywatel(
+    connection_id: str,
+    verification_code: str,
+    token_data: dict = Depends(verify_jwt_token)
+):
+    """Zweryfikuj uwierzytelnienie mObywatel"""
+    try:
+        connection = mailbox_connector.verify_mobywatel_auth(connection_id, verification_code)
+        return {
+            "status": "connected",
+            "message": "Uwierzytelnienie mObywatel zakończone pomyślnie",
+            "connection": mailbox_connector.to_response_dict(connection)
+        }
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@app.post("/api/mailbox/connections/{connection_id}/api-key", response_model=ApiCredentialsResponse)
+async def generate_api_key(
+    connection_id: str,
+    token_data: dict = Depends(verify_jwt_token)
+):
+    """Wygeneruj klucz API dla połączenia (dla systemów zewnętrznych)"""
+    try:
+        result = mailbox_connector.generate_api_credentials(connection_id)
+        return ApiCredentialsResponse(**result)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@app.post("/api/mailbox/connections/{connection_id}/sync")
+async def start_mailbox_sync(
+    connection_id: str,
+    token_data: dict = Depends(verify_jwt_token)
+):
+    """Rozpocznij synchronizację skrzynki"""
+    try:
+        result = mailbox_connector.start_sync(connection_id)
+        return result
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@app.post("/api/mailbox/connections/{connection_id}/disconnect")
+async def disconnect_mailbox(
+    connection_id: str,
+    token_data: dict = Depends(verify_jwt_token)
+):
+    """Rozłącz skrzynkę (zachowaj dane)"""
+    if not mailbox_connector.disconnect(connection_id):
+        raise HTTPException(status_code=404, detail="Połączenie nie znalezione")
+    return {"status": "disconnected", "message": "Skrzynka została rozłączona"}
+
+
+@app.delete("/api/mailbox/connections/{connection_id}")
+async def delete_mailbox_connection(
+    connection_id: str,
+    token_data: dict = Depends(verify_jwt_token)
+):
+    """Usuń połączenie ze skrzynką"""
+    if not mailbox_connector.delete_connection(connection_id):
+        raise HTTPException(status_code=404, detail="Połączenie nie znalezione")
+    return {"status": "deleted", "message": "Połączenie zostało usunięte"}
+
+
+@app.get("/api/mailbox/methods")
+async def get_connection_methods():
+    """Pobierz dostępne metody połączenia"""
+    return {
+        "methods": [
+            {
+                "id": "oauth2",
+                "name": "OAuth2 (Oficjalne API)",
+                "description": "Połączenie przez oficjalne API e-Doręczeń z autoryzacją OAuth2",
+                "recommended": True,
+                "steps": [
+                    "Utwórz połączenie",
+                    "Pobierz URL autoryzacji",
+                    "Zaloguj się do e-Doręczeń",
+                    "Wyraź zgodę na dostęp"
+                ]
+            },
+            {
+                "id": "certificate",
+                "name": "Certyfikat kwalifikowany",
+                "description": "Połączenie używając certyfikatu kwalifikowanego (Certum, KIR, etc.)",
+                "recommended": False,
+                "steps": [
+                    "Utwórz połączenie",
+                    "Prześlij certyfikat (.p12/.pfx)",
+                    "Podaj hasło do certyfikatu"
+                ]
+            },
+            {
+                "id": "mobywatel",
+                "name": "mObywatel",
+                "description": "Uwierzytelnienie przez aplikację mObywatel",
+                "recommended": True,
+                "steps": [
+                    "Utwórz połączenie",
+                    "Otwórz aplikację mObywatel",
+                    "Zeskanuj kod QR lub wprowadź kod",
+                    "Potwierdź tożsamość"
+                ]
+            },
+            {
+                "id": "api_key",
+                "name": "Klucz API",
+                "description": "Dla systemów zewnętrznych - generuje klucz i sekret API",
+                "recommended": False,
+                "steps": [
+                    "Utwórz połączenie",
+                    "Wygeneruj klucz API",
+                    "Zapisz klucz i sekret",
+                    "Użyj w nagłówku Authorization"
+                ]
+            }
+        ]
+    }
 
 
 # ═══════════════════════════════════════════════════════════════

@@ -8,12 +8,12 @@ import {
 const steps = [
   {
     id: 1,
-    title: 'Zaloguj się do Panelu Certum',
-    description: 'Wejdź na stronę Certum i zaloguj się. Jeśli nie masz jeszcze konta, załóż je podając swój adres e-mail.',
+    title: 'Zaloguj się do panelu IDCard.pl',
+    description: 'Wejdź na stronę IDCard.pl i zaloguj się. Jeśli nie masz jeszcze konta, załóż je podając swój adres e-mail.',
     icon: User,
     action: {
-      label: 'Otwórz Panel Certum',
-      url: 'https://panel.certum.pl/'
+      label: 'Otwórz Panel IDCard.pl',
+      url: 'https://idcard.pl/'
     },
     tips: [
       'Użyj aktualnego adresu e-mail',
@@ -24,12 +24,12 @@ const steps = [
   {
     id: 2,
     title: 'Wybierz metodę uwierzytelnienia',
-    description: 'Z dostępnych metod wybierz sposób uwierzytelnienia skrzynki: mObywatel lub podpis elektroniczny Certum.',
+    description: 'Z dostępnych metod wybierz sposób uwierzytelnienia skrzynki: mObywatel, OAuth2 lub certyfikat kwalifikowany.',
     icon: Shield,
     tips: [
       'mObywatel - najszybsza metoda dla osób fizycznych',
-      'Podpis elektroniczny - dla firm i zaawansowanych użytkowników',
-      'Obie metody są bezpieczne i zgodne z przepisami'
+      'OAuth2 - zalecana metoda przez oficjalne API',
+      'Certyfikat kwalifikowany - dla firm i urzędów'
     ]
   },
   {
@@ -129,7 +129,7 @@ export default function GuidePage() {
             Załóż skrzynkę <span className="text-pp-red">e-Doręczeń</span> w kilka minut
           </h1>
           <p className="text-xl text-gray-300 max-w-2xl mx-auto">
-            Dowiedz się, jak założyć skrzynkę e-Doręczeń Certum i rozpocząć 
+            Dowiedz się, jak podłączyć skrzynkę e-Doręczeń przez IDCard.pl i rozpocząć 
             elektroniczną komunikację z urzędami.
           </p>
         </div>

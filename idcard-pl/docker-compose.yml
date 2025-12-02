@@ -1,0 +1,55 @@
+services:
+  # ===========================================
+  # IDCard.pl Backend (Integration Gateway)
+  # ===========================================
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: idcard-backend
+    ports:
+      - "${BACKEND_PORT:-4000}:4000"
+    environment:
+      IDCARD_DOMAIN: ${IDCARD_DOMAIN:-idcard.pl}
+      JWT_SECRET: ${JWT_SECRET:-idcard-secret-key-change-in-production}
+      # Połączenie z Szyfromat.pl (e-Doręczenia SaaS)
+      SZYFROMAT_API_URL: ${SZYFROMAT_API_URL:-http://szyfromat-backend:8000}
+      SZYFROMAT_CLIENT_ID: ${SZYFROMAT_CLIENT_ID:-idcard_client}
+      SZYFROMAT_CLIENT_SECRET: ${SZYFROMAT_CLIENT_SECRET:-idcard_secret}
+      # Inne usługi
+      EPUAP_API_URL: ${EPUAP_API_URL:-https://epuap.gov.pl/api}
+      KSEF_API_URL: ${KSEF_API_URL:-https://ksef.mf.gov.pl/api}
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:4000/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - idcard-net
+      - szyfromat-net
+    restart: unless-stopped
+
+  # ===========================================
+  # IDCard.pl Frontend (React Dashboard)
+  # ===========================================
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: idcard-frontend
+    ports:
+      - "${FRONTEND_PORT:-4100}:80"
+    depends_on:
+      backend:
+        condition: service_healthy
+    networks:
+      - idcard-net
+    restart: unless-stopped
+
+networks:
+  idcard-net:
+    driver: bridge
+  # Połączenie z siecią Szyfromat.pl
+  szyfromat-net:
+    external: true
+    name: szyfromat-pl_szyfromat-net

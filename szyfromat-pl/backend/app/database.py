@@ -168,6 +168,55 @@ class Attachment(Base):
     created_at = Column(DateTime, default=datetime.utcnow)
 
 
+class MailboxConnection(Base):
+    """Połączenie ze skrzynką e-Doręczeń"""
+    __tablename__ = "mailbox_connections"
+    
+    id = Column(String(50), primary_key=True)
+    user_id = Column(String(50), ForeignKey("users.id"), nullable=False, index=True)
+    
+    # Dane skrzynki
+    ade_address = Column(String(100), nullable=False, unique=True, index=True)
+    mailbox_name = Column(String(255), nullable=True)
+    mailbox_type = Column(String(50), default="person")
+    
+    # Metoda i status
+    connection_method = Column(String(50), default="oauth2")
+    status = Column(String(50), default="pending")
+    
+    # OAuth2 tokens
+    oauth_access_token = Column(Text, nullable=True)
+    oauth_refresh_token = Column(Text, nullable=True)
+    oauth_expires_at = Column(DateTime, nullable=True)
+    
+    # Certificate
+    certificate_thumbprint = Column(String(100), nullable=True)
+    certificate_subject = Column(String(255), nullable=True)
+    certificate_expires_at = Column(DateTime, nullable=True)
+    
+    # API Key
+    api_key = Column(String(100), nullable=True)
+    api_secret_hash = Column(String(255), nullable=True)
+    
+    # Sync config
+    sync_enabled = Column(Boolean, default=True)
+    sync_interval_minutes = Column(Integer, default=5)
+    last_sync_at = Column(DateTime, nullable=True)
+    next_sync_at = Column(DateTime, nullable=True)
+    
+    # Stats
+    messages_synced = Column(Integer, default=0)
+    last_error = Column(Text, nullable=True)
+    
+    # Timestamps
+    created_at = Column(DateTime, default=datetime.utcnow)
+    connected_at = Column(DateTime, nullable=True)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    
+    # Extra
+    extra_config = Column(JSON, default=dict)
+
+
 # ═══════════════════════════════════════════════════════════════
 # DATABASE INITIALIZATION
 # ═══════════════════════════════════════════════════════════════

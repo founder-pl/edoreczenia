@@ -1,22 +1,24 @@
 services:
   # ===========================================
-  # Backend API (FastAPI)
+  # Szyfromat.pl Backend API (FastAPI)
   # ===========================================
   backend:
     build:
       context: ./backend
       dockerfile: Dockerfile
-    container_name: edoreczenia-saas-backend
+    container_name: szyfromat-backend
     ports:
       - "${BACKEND_PORT:-8000}:8000"
     environment:
+      SZYFROMAT_DOMAIN: ${SZYFROMAT_DOMAIN:-szyfromat.pl}
+      IDCARD_API_URL: ${IDCARD_API_URL:-http://idcard-backend:4000}
       PROXY_API_URL: ${PROXY_API_URL:-http://host.docker.internal:8180}
       SYNC_API_URL: ${SYNC_API_URL:-http://host.docker.internal:8280}
       DSL_API_URL: ${DSL_API_URL:-http://host.docker.internal:8380}
       EDORECZENIA_CLIENT_ID: ${EDORECZENIA_CLIENT_ID:-test_client_id}
       EDORECZENIA_CLIENT_SECRET: ${EDORECZENIA_CLIENT_SECRET:-test_client_secret}
-      JWT_SECRET: ${JWT_SECRET:-super-secret-key-change-in-production}
-      DATABASE_URL: ${DATABASE_URL:-sqlite:////data/edoreczenia.db}
+      JWT_SECRET: ${JWT_SECRET:-szyfromat-secret-key-change-in-production}
+      DATABASE_URL: ${DATABASE_URL:-sqlite:////data/szyfromat.db}
     volumes:
       - sqlite-data:/data
     extra_hosts:
@@ -27,24 +29,24 @@ services:
       timeout: 5s
       retries: 5
     networks:
-      - saas-net
+      - szyfromat-net
     restart: unless-stopped
 
   # ===========================================
-  # Frontend (React + Vite)
+  # Szyfromat.pl Frontend (React + Vite)
   # ===========================================
   frontend:
     build:
       context: ./frontend
       dockerfile: Dockerfile
-    container_name: edoreczenia-saas-frontend
+    container_name: szyfromat-frontend
     ports:
       - "${FRONTEND_PORT:-3000}:80"
     depends_on:
       backend:
         condition: service_healthy
     networks:
-      - saas-net
+      - szyfromat-net
     restart: unless-stopped
 
 volumes:
@@ -52,5 +54,5 @@ volumes:
     driver: local
 
 networks:
-  saas-net:
+  szyfromat-net:
     driver: bridge
