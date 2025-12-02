@@ -16,6 +16,9 @@ services:
       EDORECZENIA_CLIENT_ID: ${EDORECZENIA_CLIENT_ID:-test_client_id}
       EDORECZENIA_CLIENT_SECRET: ${EDORECZENIA_CLIENT_SECRET:-test_client_secret}
       JWT_SECRET: ${JWT_SECRET:-super-secret-key-change-in-production}
+      DATABASE_URL: ${DATABASE_URL:-sqlite:////data/edoreczenia.db}
+    volumes:
+      - sqlite-data:/data
     extra_hosts:
       - "host.docker.internal:host-gateway"
     healthcheck:
@@ -43,6 +46,10 @@ services:
     networks:
       - saas-net
     restart: unless-stopped
+
+volumes:
+  sqlite-data:
+    driver: local
 
 networks:
   saas-net:

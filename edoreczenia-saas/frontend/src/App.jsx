@@ -7,6 +7,7 @@ import MessagePage from './pages/MessagePage.jsx';
 import ComposePage from './pages/ComposePage.jsx';
 import SettingsPage from './pages/SettingsPage.jsx';
 import GuidePage from './pages/GuidePage.jsx';
+import IntegrationPage from './pages/IntegrationPage.jsx';
 
 function ProtectedRoute({ children }) {
   const { user, loading } = useAuth();
@@ -48,6 +49,7 @@ function AppRoutes() {
         <Route path="message/:id" element={<MessagePage />} />
         <Route path="compose" element={<ComposePage />} />
         <Route path="settings" element={<SettingsPage />} />
+        <Route path="integrations" element={<IntegrationPage />} />
       </Route>
     </Routes>
   );

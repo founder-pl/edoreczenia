@@ -1,9 +1,15 @@
 """
 e-Doręczenia SaaS - Backend API
 FastAPI application for e-Doręczenia web panel
+
+Architecture: CQRS + Event Sourcing
+- Commands: Write operations that generate events
+- Queries: Read operations from projections
+- Events: Immutable facts stored in Event Store
+- Projections: Read models built from events
 """
 
-from fastapi import FastAPI, HTTPException, Depends, status
+from fastapi import FastAPI, HTTPException, Depends, status, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from pydantic import BaseModel, Field
@@ -13,6 +19,30 @@ import httpx
 import os
 import uuid
 import jwt
+
+# Database
+from .database import init_db, get_db
+
+# Services (SQLite)
+from .services.message_service import message_service
+from .services.integration_service import integration_service
+from .services.user_service import user_service
+
+# CQRS imports
+from .cqrs.commands import (
+    CreateMessageCommand, SendMessageCommand, ReadMessageCommand,
+    ArchiveMessageCommand, DeleteMessageCommand, MoveMessageCommand,
+    LoginCommand, StartSyncCommand
+)
+from .cqrs.queries import (
+    GetMessagesQuery, GetMessageQuery, GetMessageHistoryQuery,
+    GetFoldersQuery, GetUserActivityQuery, GetEventLogQuery, GetDashboardStatsQuery
+)
+from .cqrs.command_handlers import command_bus
+from .cqrs.query_handlers import query_bus
+from .cqrs.event_store import event_store
+from .cqrs.events import MessageReceivedEvent
+from .cqrs.projections import message_projection, folder_projection
 
 app = FastAPI(
     title="e-Doręczenia SaaS",
@@ -98,6 +128,52 @@ class IntegrationStatus(BaseModel):
     url: str
     status: str
     latency_ms: Optional[int] = None
+
+# ═══════════════════════════════════════════════════════════════
+# E-DORĘCZENIA ADDRESS INTEGRATION MODELS
+# ═══════════════════════════════════════════════════════════════
+
+class AddressIntegrationRequest(BaseModel):
+    """Żądanie integracji adresu e-Doręczeń"""
+    ade_address: str = Field(..., description="Adres ADE (np. AE:PL-12345-67890-ABCDE-12)")
+    provider: str = Field(default="certum", description="Dostawca: certum, poczta_polska")
+    auth_method: str = Field(..., description="Metoda uwierzytelnienia: mobywatel, certum_signature, qualified_signature")
+    # Dane do weryfikacji
+    nip: Optional[str] = None
+    pesel: Optional[str] = None
+    krs: Optional[str] = None
+    regon: Optional[str] = None
+    entity_type: str = Field(default="person", description="Typ: person, company, public_entity")
+
+class AddressIntegrationResponse(BaseModel):
+    """Odpowiedź integracji adresu"""
+    id: str
+    ade_address: str
+    status: str  # pending, verifying, active, failed
+    provider: str
+    entity_type: str
+    created_at: datetime
+    verified_at: Optional[datetime] = None
+    message: Optional[str] = None
+
+class AddressVerificationStep(BaseModel):
+    """Krok weryfikacji"""
+    step: int
+    name: str
+    status: str  # pending, in_progress, completed, failed
+    description: str
+    required_action: Optional[str] = None
+
+class IntegrationCredentials(BaseModel):
+    """Poświadczenia do integracji"""
+    integration_id: str
+    oauth_token: Optional[str] = None
+    certificate_thumbprint: Optional[str] = None
+    api_key: Optional[str] = None
+    expires_at: Optional[datetime] = None
+
+# In-memory storage for integrations (w produkcji: baza danych)
+address_integrations = {}
 
 # ═══════════════════════════════════════════════════════════════
 # AUTH HELPERS
@@ -221,10 +297,35 @@ async def get_messages(
     offset: int = 0,
     token_data: dict = Depends(verify_jwt_token)
 ):
-    """Pobierz listę wiadomości z wybranego folderu"""
+    """Pobierz listę wiadomości z wybranego folderu - SQLite + demo data"""
+    user_id = token_data["sub"]
+    result_messages = []
+    
+    # 1. Pobierz wiadomości z SQLite
+    db_messages = message_service.get_messages(
+        user_id=user_id,
+        folder=folder,
+        limit=limit,
+        offset=offset
+    )
+    
+    for msg in db_messages:
+        result_messages.append(MessageResponse(
+            id=msg.id,
+            subject=msg.subject,
+            sender={"address": msg.sender_address or "unknown", "name": msg.sender_name},
+            recipient={"address": msg.recipient_address} if msg.recipient_address else None,
+            status=msg.status,
+            receivedAt=msg.received_at,
+            sentAt=msg.sent_at,
+            content=msg.content,
+            attachments=msg.attachments or []
+        ))
+    
+    # 2. Próba pobrania z zewnętrznego API
     try:
         api_token = await get_api_token(config.PROXY_API_URL)
-        async with httpx.AsyncClient() as client:
+        async with httpx.AsyncClient(timeout=3.0) as client:
             response = await client.get(
                 f"{config.PROXY_API_URL}/ua/v5/messages",
                 params={"folder": folder, "limit": limit, "offset": offset},
@@ -233,9 +334,10 @@ async def get_messages(
             if response.status_code == 200:
                 data = response.json()
                 messages = data.get("messages", data) if isinstance(data, dict) else data
-                return [MessageResponse(**msg) for msg in messages]
+                for msg in messages:
+                    result_messages.append(MessageResponse(**msg))
     except Exception as e:
-        print(f"Error fetching messages: {e}")
+        print(f"External API unavailable: {e}")
     
     # Fallback demo data - różne dla każdego folderu
     demo_messages = {
@@ -341,7 +443,14 @@ async def get_messages(
         ]
     }
     
-    return demo_messages.get(folder, demo_messages["inbox"])
+    # 3. Dodaj demo data jeśli brak wiadomości z CQRS
+    if not result_messages:
+        result_messages = demo_messages.get(folder, demo_messages["inbox"])
+    else:
+        # Dodaj demo data na koniec
+        result_messages.extend(demo_messages.get(folder, []))
+    
+    return result_messages
 
 @app.get("/api/messages/{message_id}", response_model=MessageResponse)
 async def get_message(message_id: str, token_data: dict = Depends(verify_jwt_token)):
@@ -460,11 +569,44 @@ async def get_message(message_id: str, token_data: dict = Depends(verify_jwt_tok
 
 @app.post("/api/messages", response_model=MessageResponse)
 async def send_message(message: MessageCreate, token_data: dict = Depends(verify_jwt_token)):
-    """Wyślij nową wiadomość"""
+    """Wyślij nową wiadomość - zapisuje do SQLite + CQRS Event Store"""
+    user_id = token_data["sub"]
+    
+    # 1. Zapisz wiadomość do SQLite
+    db_message = message_service.create_message(
+        user_id=user_id,
+        subject=message.subject,
+        content=message.content,
+        recipient_address=message.recipient,
+        folder="drafts",
+        status="DRAFT"
+    )
+    
+    # 2. Wyślij wiadomość (zmień status)
+    db_message = message_service.send_message(db_message.id)
+    
+    # 3. Zapisz zdarzenie do Event Store (CQRS)
+    create_cmd = CreateMessageCommand(
+        user_id=user_id,
+        recipient=message.recipient,
+        subject=message.subject,
+        content=message.content,
+        attachments=message.attachments
+    )
+    create_result = await command_bus.dispatch(create_cmd)
+    
+    if create_result.success:
+        send_cmd = SendMessageCommand(
+            user_id=user_id,
+            message_id=create_result.data["message_id"]
+        )
+        await command_bus.dispatch(send_cmd)
+    
+    # 4. Próba wysłania przez zewnętrzne API (opcjonalne)
     try:
         api_token = await get_api_token(config.PROXY_API_URL)
-        async with httpx.AsyncClient() as client:
-            response = await client.post(
+        async with httpx.AsyncClient(timeout=5.0) as client:
+            await client.post(
                 f"{config.PROXY_API_URL}/ua/v5/messages",
                 json={
                     "recipient": {"address": message.recipient},
@@ -474,27 +616,18 @@ async def send_message(message: MessageCreate, token_data: dict = Depends(verify
                 },
                 headers={"Authorization": f"Bearer {api_token}"}
             )
-            if response.status_code in [200, 201]:
-                data = response.json()
-                return MessageResponse(
-                    id=data.get("messageId", str(uuid.uuid4())[:8]),
-                    subject=message.subject,
-                    sender={"address": "AE:PL-12345-67890-ABCDE-12"},
-                    recipient={"address": message.recipient},
-                    status="SENT",
-                    sentAt=datetime.now()
-                )
     except Exception as e:
-        print(f"Error sending message: {e}")
+        print(f"External API unavailable: {e}")
     
-    # Demo fallback
+    # Zwróć odpowiedź z SQLite
     return MessageResponse(
-        id=f"msg-{uuid.uuid4().hex[:8]}",
-        subject=message.subject,
-        sender={"address": "AE:PL-12345-67890-ABCDE-12", "name": "Użytkownik Testowy"},
-        recipient={"address": message.recipient},
-        status="SENT",
-        sentAt=datetime.now()
+        id=db_message.id,
+        subject=db_message.subject,
+        sender={"address": db_message.sender_address or "unknown", "name": db_message.sender_name or "Użytkownik"},
+        recipient={"address": db_message.recipient_address},
+        status=db_message.status,
+        sentAt=db_message.sent_at,
+        content=db_message.content
     )
 
 @app.delete("/api/messages/{message_id}")
@@ -592,6 +725,138 @@ async def get_integrations_status(token_data: dict = Depends(verify_jwt_token)):
     return results
 
 # ═══════════════════════════════════════════════════════════════
+# ADDRESS INTEGRATION ENDPOINTS
+# ═══════════════════════════════════════════════════════════════
+
+@app.get("/api/address-integrations", response_model=List[AddressIntegrationResponse])
+async def get_address_integrations(token_data: dict = Depends(verify_jwt_token)):
+    """Pobierz listę zintegrowanych adresów e-Doręczeń - SQLite"""
+    user_id = token_data["sub"]
+    integrations = integration_service.get_integrations(user_id)
+    return [
+        AddressIntegrationResponse(**integration_service.to_response_dict(i))
+        for i in integrations
+    ]
+
+
+@app.post("/api/address-integrations", response_model=AddressIntegrationResponse)
+async def create_address_integration(
+    request: AddressIntegrationRequest,
+    token_data: dict = Depends(verify_jwt_token)
+):
+    """Rozpocznij integrację adresu e-Doręczeń - SQLite"""
+    user_id = token_data["sub"]
+    
+    # Walidacja adresu ADE
+    if not request.ade_address.startswith("AE:PL-"):
+        raise HTTPException(
+            status_code=400, 
+            detail="Nieprawidłowy format adresu ADE. Powinien zaczynać się od 'AE:PL-'"
+        )
+    
+    # Walidacja danych identyfikacyjnych
+    if request.entity_type == "person" and not request.pesel:
+        raise HTTPException(status_code=400, detail="PESEL jest wymagany dla osób fizycznych")
+    if request.entity_type == "company" and not (request.nip or request.krs):
+        raise HTTPException(status_code=400, detail="NIP lub KRS jest wymagany dla firm")
+    
+    integration = integration_service.create_integration(
+        user_id=user_id,
+        ade_address=request.ade_address,
+        provider=request.provider,
+        auth_method=request.auth_method,
+        entity_type=request.entity_type,
+        nip=request.nip,
+        pesel=request.pesel,
+        krs=request.krs,
+        regon=request.regon
+    )
+    
+    return AddressIntegrationResponse(**integration_service.to_response_dict(integration))
+
+
+@app.get("/api/address-integrations/{integration_id}", response_model=AddressIntegrationResponse)
+async def get_address_integration(
+    integration_id: str,
+    token_data: dict = Depends(verify_jwt_token)
+):
+    """Pobierz szczegóły integracji - SQLite"""
+    integration = integration_service.get_integration(integration_id)
+    if not integration:
+        raise HTTPException(status_code=404, detail="Integracja nie znaleziona")
+    
+    return AddressIntegrationResponse(**integration_service.to_response_dict(integration))
+
+
+@app.get("/api/address-integrations/{integration_id}/steps", response_model=List[AddressVerificationStep])
+async def get_integration_steps(
+    integration_id: str,
+    token_data: dict = Depends(verify_jwt_token)
+):
+    """Pobierz kroki weryfikacji integracji - SQLite"""
+    steps = integration_service.get_verification_steps(integration_id)
+    if not steps:
+        raise HTTPException(status_code=404, detail="Integracja nie znaleziona")
+    
+    return [AddressVerificationStep(**s) for s in steps]
+
+
+@app.post("/api/address-integrations/{integration_id}/verify")
+async def verify_integration(
+    integration_id: str,
+    token_data: dict = Depends(verify_jwt_token)
+):
+    """Rozpocznij weryfikację integracji - SQLite"""
+    integration = integration_service.start_verification(integration_id)
+    if not integration:
+        raise HTTPException(status_code=404, detail="Integracja nie znaleziona")
+    
+    return {"status": "verifying", "message": "Weryfikacja rozpoczęta"}
+
+
+@app.post("/api/address-integrations/{integration_id}/complete")
+async def complete_integration(
+    integration_id: str,
+    token_data: dict = Depends(verify_jwt_token)
+):
+    """Zakończ integrację - SQLite"""
+    integration = integration_service.complete_verification(integration_id)
+    if not integration:
+        raise HTTPException(status_code=404, detail="Integracja nie znaleziona")
+    
+    return {
+        "status": "active",
+        "message": "Adres e-Doręczeń został pomyślnie zintegrowany",
+        "ade_address": integration.ade_address
+    }
+
+
+@app.delete("/api/address-integrations/{integration_id}")
+async def delete_integration(
+    integration_id: str,
+    token_data: dict = Depends(verify_jwt_token)
+):
+    """Usuń integrację - SQLite"""
+    if not integration_service.delete_integration(integration_id):
+        raise HTTPException(status_code=404, detail="Integracja nie znaleziona")
+    
+    return {"status": "deleted", "message": "Integracja została usunięta"}
+
+
+@app.get("/api/address-integrations/{integration_id}/credentials", response_model=IntegrationCredentials)
+async def get_integration_credentials(
+    integration_id: str,
+    token_data: dict = Depends(verify_jwt_token)
+):
+    """Pobierz poświadczenia integracji - SQLite"""
+    credentials = integration_service.get_credentials(integration_id)
+    if not credentials:
+        raise HTTPException(status_code=400, detail="Integracja nie jest aktywna lub nie istnieje")
+    
+    return IntegrationCredentials(**credentials)
+
+
+# ═══════════════════════════════════════════════════════════════
 # HEALTH & INFO
 # ═══════════════════════════════════════════════════════════════
 
@@ -611,9 +876,146 @@ async def root():
     return {
         "name": "e-Doręczenia SaaS API",
         "version": "1.0.0",
+        "architecture": "CQRS + Event Sourcing",
         "docs": "/docs",
-        "health": "/health"
+        "health": "/health",
+        "cqrs": {
+            "events": "/api/cqrs/events",
+            "stats": "/api/cqrs/stats",
+            "history": "/api/cqrs/messages/{id}/history"
+        }
     }
+
+# ═══════════════════════════════════════════════════════════════
+# CQRS ENDPOINTS
+# ═══════════════════════════════════════════════════════════════
+
+@app.get("/api/cqrs/events")
+async def get_event_log(
+    aggregate_id: Optional[str] = None,
+    event_type: Optional[str] = None,
+    limit: int = 100,
+    token_data: dict = Depends(verify_jwt_token)
+):
+    """Pobierz log zdarzeń (Event Sourcing)"""
+    query = GetEventLogQuery(
+        user_id=token_data["sub"],
+        aggregate_id=aggregate_id,
+        event_type=event_type,
+        limit=limit
+    )
+    result = await query_bus.dispatch(query)
+    
+    if result.success:
+        return result.data
+    raise HTTPException(status_code=400, detail=result.error)
+
+
+@app.get("/api/cqrs/stats")
+async def get_cqrs_stats(token_data: dict = Depends(verify_jwt_token)):
+    """Pobierz statystyki CQRS/Event Store"""
+    query = GetDashboardStatsQuery(user_id=token_data["sub"])
+    result = await query_bus.dispatch(query)
+    
+    if result.success:
+        return {
+            **result.data,
+            "event_store": event_store.get_stats()
+        }
+    raise HTTPException(status_code=400, detail=result.error)
+
+
+@app.get("/api/cqrs/messages/{message_id}/history")
+async def get_message_history(
+    message_id: str,
+    token_data: dict = Depends(verify_jwt_token)
+):
+    """Pobierz historię zdarzeń wiadomości (Event Sourcing)"""
+    query = GetMessageHistoryQuery(
+        user_id=token_data["sub"],
+        message_id=message_id
+    )
+    result = await query_bus.dispatch(query)
+    
+    if result.success:
+        return result.data
+    raise HTTPException(status_code=404, detail=result.error)
+
+
+@app.get("/api/cqrs/user/activity")
+async def get_user_activity(
+    limit: int = 100,
+    token_data: dict = Depends(verify_jwt_token)
+):
+    """Pobierz aktywność użytkownika"""
+    query = GetUserActivityQuery(
+        user_id=token_data["sub"],
+        limit=limit
+    )
+    result = await query_bus.dispatch(query)
+    
+    if result.success:
+        return result.data
+    raise HTTPException(status_code=400, detail=result.error)
+
+
+# ═══════════════════════════════════════════════════════════════
+# CQRS COMMAND ENDPOINTS (Alternative to existing endpoints)
+# ═══════════════════════════════════════════════════════════════
+
+@app.post("/api/cqrs/messages")
+async def create_message_cqrs(
+    message: MessageCreate,
+    token_data: dict = Depends(verify_jwt_token)
+):
+    """Utwórz wiadomość przez CQRS Command"""
+    command = CreateMessageCommand(
+        user_id=token_data["sub"],
+        recipient=message.recipient,
+        subject=message.subject,
+        content=message.content,
+        attachments=message.attachments
+    )
+    result = await command_bus.dispatch(command)
+    
+    if result.success:
+        return result.data
+    raise HTTPException(status_code=400, detail=result.error)
+
+
+@app.post("/api/cqrs/messages/{message_id}/send")
+async def send_message_cqrs(
+    message_id: str,
+    token_data: dict = Depends(verify_jwt_token)
+):
+    """Wyślij wiadomość przez CQRS Command"""
+    command = SendMessageCommand(
+        user_id=token_data["sub"],
+        message_id=message_id
+    )
+    result = await command_bus.dispatch(command)
+    
+    if result.success:
+        return result.data
+    raise HTTPException(status_code=400, detail=result.error)
+
+
+@app.post("/api/cqrs/messages/{message_id}/archive")
+async def archive_message_cqrs(
+    message_id: str,
+    token_data: dict = Depends(verify_jwt_token)
+):
+    """Zarchiwizuj wiadomość przez CQRS Command"""
+    command = ArchiveMessageCommand(
+        user_id=token_data["sub"],
+        message_id=message_id
+    )
+    result = await command_bus.dispatch(command)
+    
+    if result.success:
+        return result.data
+    raise HTTPException(status_code=400, detail=result.error)
+
 
 if __name__ == "__main__":
     import uvicorn

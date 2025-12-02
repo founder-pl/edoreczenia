@@ -3,7 +3,7 @@ import { useAuth } from '../hooks/useAuth.jsx';
 import { foldersApi } from '../services/api.jsx';
 import { 
   Inbox, Send, FileText, Trash2, Archive, Settings, 
-  LogOut, Menu, X, PenSquare, Mail, User, Bell, BookOpen
+  LogOut, Menu, X, PenSquare, Mail, User, Bell, BookOpen, Link2
 } from 'lucide-react';
 import { useState, useEffect } from 'react';
 
@@ -155,6 +155,20 @@ export default function Layout() {
 
             {/* Settings & Guide links */}
             <div className="mt-8 pt-4 border-t border-gray-200 space-y-1">
+              <Link
+                to="/integrations"
+                onClick={() => setSidebarOpen(false)}
+                className={`
+                  flex items-center gap-3 px-4 py-3 rounded-xl transition-colors
+                  ${location.pathname === '/integrations'
+                    ? 'bg-pp-red/10 text-pp-red font-medium'
+                    : 'text-gray-700 hover:bg-gray-100'
+                  }
+                `}
+              >
+                <Link2 size={20} />
+                <span>Integracje</span>
+              </Link>
               <Link
                 to="/guide"
                 onClick={() => setSidebarOpen(false)}
