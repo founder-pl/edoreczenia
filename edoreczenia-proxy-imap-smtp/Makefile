@@ -17,10 +17,10 @@ help:
 	@echo "  make proxy-logs      - Logi proxy IMAP/SMTP"
 	@echo ""
 	@echo "Dane dostępowe:"
-	@echo "  Webmail:     http://localhost:9000"
-	@echo "  API Docs:    http://localhost:8080/docs"
-	@echo "  IMAP:        localhost:1143"
-	@echo "  SMTP:        localhost:1025"
+	@echo "  Webmail:     http://localhost:9080"
+	@echo "  API Docs:    http://localhost:8180/docs"
+	@echo "  IMAP:        localhost:11143"
+	@echo "  SMTP:        localhost:11025"
 	@echo "  User/Pass:   testuser / testpass123"
 
 # Budowanie obrazów
@@ -29,13 +29,13 @@ build:
 
 # Uruchomienie
 up:
-	docker-compose up -d
+	docker-compose up --build
 	@echo ""
 	@echo "=== Serwisy uruchomione ==="
-	@echo "Webmail:     http://localhost:9000"
-	@echo "API Docs:    http://localhost:8080/docs"
-	@echo "IMAP:        localhost:1143"
-	@echo "SMTP:        localhost:1025"
+	@echo "Webmail:     http://localhost:9080"
+	@echo "API Docs:    http://localhost:8180/docs"
+	@echo "IMAP:        localhost:11143"
+	@echo "SMTP:        localhost:11025"
 	@echo "User/Pass:   testuser / testpass123"
 
 # Zatrzymanie

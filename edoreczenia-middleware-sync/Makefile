@@ -20,9 +20,9 @@ help:
 	@echo "  make dovecot-logs    - Logi serwera IMAP"
 	@echo ""
 	@echo "Dane dostępowe:"
-	@echo "  Webmail:     http://localhost:9000"
-	@echo "  API Docs:    http://localhost:8080/docs"
-	@echo "  IMAP:        localhost:1143"
+	@echo "  Webmail:     http://localhost:9180"
+	@echo "  API Docs:    http://localhost:8280/docs"
+	@echo "  IMAP:        localhost:21143"
 	@echo "  User/Pass:   mailuser / mailpass123"
 
 # Budowanie obrazów
@@ -31,12 +31,12 @@ build:
 
 # Uruchomienie
 up:
-	docker-compose up -d
+	docker-compose up --build
 	@echo ""
 	@echo "=== Serwisy uruchomione ==="
-	@echo "Webmail:     http://localhost:9000"
-	@echo "API Docs:    http://localhost:8080/docs"
-	@echo "IMAP:        localhost:1143"
+	@echo "Webmail:     http://localhost:9180"
+	@echo "API Docs:    http://localhost:8280/docs"
+	@echo "IMAP:        localhost:21143"
 	@echo "User/Pass:   mailuser / mailpass123"
 	@echo ""
 	@echo "Synchronizacja uruchomi się automatycznie co minutę."

@@ -23,6 +23,7 @@ class EDoreczeniaAuthenticator:
 
     def __init__(self, settings: Settings):
         self.settings = settings
+        self.authenticated_sessions: set = set()
 
     async def __call__(
         self,
@@ -49,18 +50,26 @@ class EDoreczeniaAuthenticator:
             and password == self.settings.local_auth_password.get_secret_value()
         ):
             logger.info("SMTP: Użytkownik zalogowany", username=username)
+            # Zapisz ID sesji jako uwierzytelnionej
+            self.authenticated_sessions.add(id(session))
+            session.auth_data = username  # Ustaw własny atrybut
             return AuthResult(success=True)
         else:
             logger.warning("SMTP: Nieudana próba logowania", username=username)
             return AuthResult(success=False, handled=True)
+    
+    def is_authenticated(self, session: Session) -> bool:
+        """Sprawdza czy sesja jest uwierzytelniona."""
+        return id(session) in self.authenticated_sessions or hasattr(session, 'auth_data')
 
 
 class EDoreczeniaHandler:
     """Handler wiadomości SMTP przekazujący do e-Doręczeń."""
 
-    def __init__(self, api_client: EDoreczeniaClient, settings: Settings):
+    def __init__(self, api_client: EDoreczeniaClient, settings: Settings, authenticator: EDoreczeniaAuthenticator = None):
         self.api_client = api_client
         self.settings = settings
+        self.authenticator = authenticator
 
     async def handle_EHLO(
         self,
@@ -83,8 +92,21 @@ class EDoreczeniaHandler:
         mail_options: list[str],
     ) -> str:
         """Obsługuje MAIL FROM."""
-        if not session.authenticated:
-            return "530 Authentication required"
+        # Sprawdź autentykację - aiosmtpd ustawia login_data po AUTH
+        # Loguj dla debugowania
+        logger.debug(
+            "SMTP MAIL FROM check",
+            has_auth_data=hasattr(session, 'auth_data'),
+            has_login_data=hasattr(session, 'login_data'),
+            login_data=getattr(session, 'login_data', None),
+            authenticated=getattr(session, 'authenticated', None),
+        )
+        
+        # W aiosmtpd 1.4.x, po udanej autentykacji session.login_data jest ustawiane
+        is_auth = bool(getattr(session, 'login_data', None))
+        
+        if not is_auth:
+            return "530 5.7.0 Authentication required"
 
         envelope.mail_from = address
         envelope.mail_options.extend(mail_options)
@@ -99,7 +121,7 @@ class EDoreczeniaHandler:
         rcpt_options: list[str],
     ) -> str:
         """Obsługuje RCPT TO."""
-        if not session.authenticated:
+        if not bool(getattr(session, 'login_data', None)):
             return "530 Authentication required"
 
         # Walidacja adresu e-Doręczeń (format AE:PL-...)
@@ -119,7 +141,7 @@ class EDoreczeniaHandler:
         envelope: Envelope,
     ) -> str:
         """Obsługuje DATA - przetwarza i wysyła wiadomość."""
-        if not session.authenticated:
+        if not bool(getattr(session, 'login_data', None)):
             return "530 Authentication required"
 
         try:
@@ -264,15 +286,15 @@ class SMTPServer:
 
     async def start(self) -> None:
         """Uruchamia serwer SMTP."""
-        handler = EDoreczeniaHandler(self.api_client, self.settings)
         authenticator = EDoreczeniaAuthenticator(self.settings)
+        handler = EDoreczeniaHandler(self.api_client, self.settings, authenticator)
 
         self._controller = Controller(
             handler,
             hostname=self.settings.smtp_host,
             port=self.settings.smtp_port,
             authenticator=authenticator,
-            auth_required=True,
+            auth_required=False,  # Sprawdzamy ręcznie w handle_MAIL
             auth_require_tls=False,  # Dla testów lokalnych
         )
 

@@ -39,7 +39,7 @@ services:
     restart: unless-stopped
 
   # ===========================================
-  # Webmail Client (opcjonalny - Roundcube)
+  # Webmail Client (Roundcube) - e-Doręczenia Proxy
   # ===========================================
   webmail:
     image: roundcube/roundcubemail:latest
@@ -47,11 +47,20 @@ services:
     ports:
       - "${WEBMAIL_PORT:-9080}:80"
     environment:
-      - ROUNDCUBEMAIL_DEFAULT_HOST=edoreczenia-proxy
-      - ROUNDCUBEMAIL_DEFAULT_PORT=1143
-      - ROUNDCUBEMAIL_SMTP_SERVER=edoreczenia-proxy
-      - ROUNDCUBEMAIL_SMTP_PORT=1025
-      - ROUNDCUBEMAIL_PLUGINS=archive,zipdownload
+      # Serwer IMAP (proxy e-Doręczeń)
+      ROUNDCUBEMAIL_DEFAULT_HOST: edoreczenia-proxy
+      ROUNDCUBEMAIL_DEFAULT_PORT: "1143"
+      # Serwer SMTP (proxy e-Doręczeń)
+      ROUNDCUBEMAIL_SMTP_SERVER: edoreczenia-proxy
+      ROUNDCUBEMAIL_SMTP_PORT: "1025"
+      # Pluginy
+      ROUNDCUBEMAIL_PLUGINS: archive,zipdownload,attachment_reminder
+      # Nazwa produktu
+      ROUNDCUBEMAIL_PRODUCT_NAME: "e-Doręczenia Proxy Webmail"
+      # Upload załączników do 25MB
+      ROUNDCUBEMAIL_UPLOAD_MAX_FILESIZE: 25M
+      # Skin
+      ROUNDCUBEMAIL_SKIN: elastic
     depends_on:
       - edoreczenia-proxy
     networks:
@@ -64,14 +73,19 @@ services:
   tests:
     build:
       context: .
-      dockerfile: Dockerfile
+      dockerfile: Dockerfile.test
     container_name: edoreczenia-proxy-tests
-    command: pytest tests/ -v --tb=short
     env_file:
       - .env
+    environment:
+      # Nadpisz URL-e dla testów wewnątrz sieci Docker
+      EDORECZENIA_TOKEN_URL: http://edoreczenia-simulator:8080/oauth/token
+      EDORECZENIA_API_BASE_URL: http://edoreczenia-simulator:8080/ua/v5
     depends_on:
       edoreczenia-simulator:
         condition: service_healthy
+      edoreczenia-proxy:
+        condition: service_started
     networks:
       - edoreczenia-proxy-net
     profiles:

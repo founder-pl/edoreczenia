@@ -8,16 +8,20 @@ import uuid
 from datetime import datetime, timedelta
 from typing import Any, Optional
 
-from fastapi import Depends, FastAPI, HTTPException, Header, Query, status
+from fastapi import Depends, FastAPI, Form, HTTPException, Header, Query, status
 from fastapi.responses import JSONResponse, Response
 from fastapi.security import OAuth2PasswordBearer
 from pydantic import BaseModel, Field
 
 app = FastAPI(
-    title="Symulator API e-Doręczeń",
-    description="Symulator REST API e-Doręczeń dla celów testowych i deweloperskich",
-    version="5.0.0",
+    title="User Agent API - Symulator",
+    description="Symulator REST API e-Doręczeń zgodny ze specyfikacją UA API v3.0.8",
+    version="3.0.8",
 )
+
+# Aliasy dla kompatybilności - obsługujemy zarówno /api/v1 jak i /ua/v5
+API_PREFIX_V1 = "/api/v1"
+API_PREFIX_V5 = "/ua/v5"
 
 # ============================================
 # Storage (in-memory)
@@ -224,15 +228,19 @@ def verify_token(authorization: Optional[str] = Header(None)) -> str:
 
 
 @app.post("/oauth/token", response_model=TokenResponse)
-async def get_token(request: TokenRequest):
-    """Endpoint OAuth2 do uzyskania tokenu."""
-    if request.grant_type != "client_credentials":
+async def get_token(
+    grant_type: str = Form(...),
+    client_id: str = Form(...),
+    client_secret: str = Form(...),
+):
+    """Endpoint OAuth2 do uzyskania tokenu (form-urlencoded zgodnie z RFC 6749)."""
+    if grant_type != "client_credentials":
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Unsupported grant type",
         )
 
-    if request.client_id != TEST_CLIENT_ID or request.client_secret != TEST_CLIENT_SECRET:
+    if client_id != TEST_CLIENT_ID or client_secret != TEST_CLIENT_SECRET:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid client credentials",
@@ -243,7 +251,7 @@ async def get_token(request: TokenRequest):
     expires_in = 3600
 
     tokens[access_token] = {
-        "client_id": request.client_id,
+        "client_id": client_id,
         "created_at": datetime.now().isoformat(),
         "expires_at": (datetime.now() + timedelta(seconds=expires_in)).isoformat(),
     }
@@ -251,16 +259,21 @@ async def get_token(request: TokenRequest):
     return TokenResponse(access_token=access_token, expires_in=expires_in)
 
 
-@app.get("/ua/v5/{address}/messages", response_model=MessagesListResponse)
-async def get_messages(
+async def _get_messages_impl(
     address: str,
-    folder: str = Query(default="inbox"),
-    limit: int = Query(default=50, le=100),
-    offset: int = Query(default=0),
-    since: Optional[str] = Query(default=None),
-    token: str = Depends(verify_token),
+    offset: int = 0,
+    limit: int = 20,
+    format: str = "minimal",
+    sender: Optional[str] = None,
+    recipient: Optional[str] = None,
+    subject: Optional[str] = None,
+    label: Optional[str] = None,
+    opened: Optional[bool] = None,
+    attachments_filter: Optional[bool] = None,
+    sortColumn: Optional[str] = None,
+    sortDirection: Optional[str] = None,
 ):
-    """Pobiera listę wiadomości."""
+    """Implementacja pobierania listy wiadomości zgodna z UA API v3.0.8."""
     if address != TEST_ADDRESS:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
@@ -268,21 +281,50 @@ async def get_messages(
         )
 
     # Filtrowanie wiadomości
-    filtered = [
-        msg for msg in messages.values()
-        if msg.get("folder") == folder
-    ]
+    filtered = list(messages.values())
+    
+    # Filtr po folderze/etykiecie
+    if label:
+        filtered = [msg for msg in filtered if msg.get("folder") == label or label in msg.get("labels", [])]
+    
+    # Filtr po nadawcy
+    if sender:
+        filtered = [msg for msg in filtered if sender.lower() in str(msg.get("sender", {})).lower()]
+    
+    # Filtr po odbiorcy
+    if recipient:
+        filtered = [msg for msg in filtered if any(recipient.lower() in str(r).lower() for r in msg.get("recipients", []))]
+    
+    # Filtr po temacie
+    if subject:
+        filtered = [msg for msg in filtered if subject.lower() in msg.get("subject", "").lower()]
+    
+    # Filtr po odczytaniu
+    if opened is not None:
+        filtered = [msg for msg in filtered if msg.get("opened", False) == opened]
+    
+    # Filtr po załącznikach
+    if attachments_filter is not None:
+        filtered = [msg for msg in filtered if bool(msg.get("attachments")) == attachments_filter]
 
-    # Filtr po dacie
-    if since:
-        since_dt = datetime.fromisoformat(since)
-        filtered = [
-            msg for msg in filtered
-            if datetime.fromisoformat(msg["receivedAt"]) > since_dt
-        ]
-
-    # Sortowanie po dacie (najnowsze pierwsze)
-    filtered.sort(key=lambda x: x["receivedAt"], reverse=True)
+    # Sortowanie
+    sort_key = sortColumn or "receivedAt"
+    reverse = sortDirection != "asc"
+    
+    key_mapping = {
+        "sender": lambda x: str(x.get("sender", {}).get("name", "")),
+        "recipient": lambda x: str(x.get("recipients", [{}])[0].get("name", "") if x.get("recipients") else ""),
+        "subject": lambda x: x.get("subject", ""),
+        "submissionDate": lambda x: x.get("submissionDate", x.get("receivedAt", "")),
+        "eventDate": lambda x: x.get("eventDate", x.get("receivedAt", "")),
+        "receiptDate": lambda x: x.get("receiptDate", x.get("receivedAt", "")),
+        "timestamp": lambda x: x.get("receivedAt", ""),
+    }
+    
+    if sort_key in key_mapping:
+        filtered.sort(key=key_mapping[sort_key], reverse=reverse)
+    else:
+        filtered.sort(key=lambda x: x.get("receivedAt", ""), reverse=reverse)
 
     # Paginacja
     total = len(filtered)
@@ -296,13 +338,53 @@ async def get_messages(
     )
 
 
+@app.get("/api/v1/{address}/messages", response_model=MessagesListResponse)
+@app.get("/ua/v5/{address}/messages", response_model=MessagesListResponse)
+async def get_messages(
+    address: str,
+    offset: int = Query(default=0, ge=0),
+    limit: int = Query(default=20, ge=1, le=2000),
+    format: str = Query(default="minimal", enum=["metadata", "minimal"]),
+    sender: Optional[str] = Query(default=None),
+    recipient: Optional[str] = Query(default=None),
+    subject: Optional[str] = Query(default=None),
+    label: Optional[str] = Query(default=None, description="Folder/etykieta (zgodne z dokumentacją)"),
+    folder: Optional[str] = Query(default=None, description="Folder (alias dla label)"),
+    opened: Optional[bool] = Query(default=None),
+    attachments: Optional[bool] = Query(default=None, alias="attachments"),
+    sortColumn: Optional[str] = Query(default=None, enum=["sender", "recipient", "subject", "submissionDate", "eventDate", "receiptDate", "timestamp"]),
+    sortDirection: Optional[str] = Query(default=None, enum=["asc", "desc"]),
+    token: str = Depends(verify_token),
+):
+    """Pobiera listę wiadomości (GET /{eDeliveryAddress}/messages)."""
+    # Obsługa obu parametrów: label (dokumentacja) i folder (kompatybilność)
+    effective_label = label or folder
+    
+    return await _get_messages_impl(
+        address=address,
+        offset=offset,
+        limit=limit,
+        format=format,
+        sender=sender,
+        recipient=recipient,
+        subject=subject,
+        label=effective_label,
+        opened=opened,
+        attachments_filter=attachments,
+        sortColumn=sortColumn,
+        sortDirection=sortDirection,
+    )
+
+
+@app.get("/api/v1/{address}/messages/{message_id}")
 @app.get("/ua/v5/{address}/messages/{message_id}")
 async def get_message(
     address: str,
     message_id: str,
+    format: str = Query(default="full", enum=["fullExtended", "full", "metadata", "minimal"]),
     token: str = Depends(verify_token),
 ):
-    """Pobiera szczegóły wiadomości."""
+    """Pobiera szczegóły wiadomości (GET /{eDeliveryAddress}/messages/{messageId})."""
     if address != TEST_ADDRESS:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
@@ -315,9 +397,17 @@ async def get_message(
             detail="Message not found",
         )
 
-    return messages[message_id]
+    msg = messages[message_id].copy()
+    
+    # Oznacz jako odczytaną przy pobraniu w trybie full
+    if format in ("full", "fullExtended"):
+        messages[message_id]["opened"] = True
+        messages[message_id]["status"] = "READ"
+    
+    return [msg]  # API zwraca tablicę
 
 
+@app.get("/api/v1/{address}/messages/{message_id}/attachments/{attachment_id}")
 @app.get("/ua/v5/{address}/messages/{message_id}/attachments/{attachment_id}")
 async def get_attachment(
     address: str,
@@ -325,7 +415,7 @@ async def get_attachment(
     attachment_id: str,
     token: str = Depends(verify_token),
 ):
-    """Pobiera załącznik."""
+    """Pobiera załącznik (GET /{eDeliveryAddress}/messages/{messageId}/attachments/{attachmentId})."""
     if address != TEST_ADDRESS:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
@@ -366,13 +456,14 @@ async def get_attachment(
     )
 
 
-@app.post("/ua/v5/{address}/messages")
+@app.post("/api/v1/{address}/messages", status_code=202)
+@app.post("/ua/v5/{address}/messages", status_code=202)
 async def send_message(
     address: str,
     request: SendMessageRequest,
     token: str = Depends(verify_token),
 ):
-    """Wysyła nową wiadomość."""
+    """Wysyła nową wiadomość (POST /{eDeliveryAddress}/messages)."""
     if address != TEST_ADDRESS:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
@@ -418,8 +509,9 @@ async def send_message(
     }
 
 
-@app.put("/ua/v5/{address}/messages/{message_id}/status")
-async def update_message_status(
+@app.patch("/api/v1/{address}/messages/{message_id}/message_control_data")
+@app.patch("/ua/v5/{address}/messages/{message_id}/message_control_data")
+async def update_message_control_data(
     address: str,
     message_id: str,
     request: UpdateStatusRequest,
@@ -450,8 +542,9 @@ async def update_message_status(
     return {"messageId": message_id, "status": request.status}
 
 
-@app.get("/ua/v5/{address}/messages/{message_id}/epo")
-async def get_epo(
+@app.get("/api/v1/{address}/messages/{message_id}/evidences")
+@app.get("/ua/v5/{address}/messages/{message_id}/evidences")
+async def get_evidences(
     address: str,
     message_id: str,
     token: str = Depends(verify_token),
@@ -478,25 +571,51 @@ async def get_epo(
     return epo_records[message_id]
 
 
-@app.get("/ua/v5/{address}/folders")
-async def get_folders(
+@app.delete("/api/v1/{address}/messages/{message_id}")
+@app.delete("/ua/v5/{address}/messages/{message_id}")
+async def delete_message(
     address: str,
+    message_id: str,
     token: str = Depends(verify_token),
 ):
-    """Pobiera listę folderów."""
+    """Usuwa wiadomość (DELETE /{eDeliveryAddress}/messages/{messageId})."""
     if address != TEST_ADDRESS:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Access denied",
         )
 
+    if message_id not in messages:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Message not found",
+        )
+
+    del messages[message_id]
+    return [{"messageId": message_id}]
+
+
+@app.get("/api/v1/{address}/directories")
+@app.get("/ua/v5/{address}/directories")
+async def get_directories(
+    address: str,
+    token: str = Depends(verify_token),
+):
+    """Pobiera listę katalogów (GET /{eDeliveryAddress}/directories)."""
+    if address != TEST_ADDRESS:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Access denied",
+        )
+
+    # Zgodnie z dokumentacją - zwracamy katalogi predefiniowane i definiowane
     return {
-        "folders": [
-            {"name": "inbox", "displayName": "Odebrane", "unread": 2},
-            {"name": "sent", "displayName": "Wysłane", "unread": 0},
-            {"name": "drafts", "displayName": "Robocze", "unread": 0},
-            {"name": "trash", "displayName": "Kosz", "unread": 0},
-            {"name": "archive", "displayName": "Archiwum", "unread": 0},
+        "directories": [
+            {"directoryId": "inbox", "name": "Odebrane", "label": "INBOX", "type": "predefined"},
+            {"directoryId": "sent", "name": "Wysłane", "label": "SENT", "type": "predefined"},
+            {"directoryId": "drafts", "name": "Robocze", "label": "DRAFTS", "type": "predefined"},
+            {"directoryId": "trash", "name": "Kosz", "label": "TRASH", "type": "predefined"},
+            {"directoryId": "archive", "name": "Archiwum", "label": "ARCHIVE", "type": "predefined"},
         ]
     }
 
@@ -506,8 +625,8 @@ async def health_check():
     """Health check endpoint."""
     return {
         "status": "healthy",
-        "service": "e-Doreczenia Simulator",
-        "version": "5.0.0",
+        "service": "User Agent API Simulator",
+        "version": "3.0.8",
         "timestamp": datetime.now().isoformat(),
     }
 
@@ -516,10 +635,15 @@ async def health_check():
 async def root():
     """Root endpoint z informacjami."""
     return {
-        "service": "Symulator API e-Doręczeń",
-        "version": "5.0.0",
+        "service": "Symulator User Agent API e-Doręczeń",
+        "version": "3.0.8",
+        "spec": "UA API v3.0.8.1",
         "documentation": "/docs",
         "health": "/health",
+        "endpoints": {
+            "api_v1": "/api/v1/{eDeliveryAddress}/messages",
+            "ua_v5": "/ua/v5/{eDeliveryAddress}/messages",
+        },
         "test_credentials": {
             "client_id": TEST_CLIENT_ID,
             "client_secret": TEST_CLIENT_SECRET,
