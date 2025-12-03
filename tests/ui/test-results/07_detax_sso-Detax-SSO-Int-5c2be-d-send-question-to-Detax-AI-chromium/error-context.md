@@ -1,0 +1,208 @@
+# Page snapshot
+
+```yaml
+- generic [ref=e2]:
+  - banner [ref=e3]:
+    - heading "detax" [level=1] [ref=e5]
+    - paragraph [ref=e6]: Odetchnij od podatków
+    - generic [ref=e9]: Błąd połączenia
+  - generic [ref=e10]:
+    - generic [ref=e11]:
+      - navigation [ref=e13]:
+        - button "⚙️ Edycja" [ref=e14] [cursor=pointer]:
+          - generic [ref=e15]: ⚙️
+          - generic [ref=e16]: Edycja
+      - complementary [ref=e18]:
+        - generic [ref=e19]:
+          - heading "👥 Kontakty" [level=3] [ref=e20]
+          - list [ref=e21]:
+            - listitem [ref=e22] [cursor=pointer]: Kontrahent
+            - listitem [ref=e23] [cursor=pointer]: Księgowa
+            - listitem [ref=e24] [cursor=pointer]: Doradca podatkowy
+            - listitem [ref=e25] [cursor=pointer]: Prawnik
+            - listitem [ref=e26] [cursor=pointer]: Urzędnik
+      - complementary [ref=e28]:
+        - generic [ref=e29]:
+          - heading "📢 Kanały" [level=3] [ref=e30]
+          - list [ref=e31]:
+            - listitem [ref=e32] [cursor=pointer]: "# ogólne"
+            - listitem [ref=e33] [cursor=pointer]: "# ksef"
+            - listitem [ref=e34] [cursor=pointer]: "# b2b"
+            - listitem [ref=e35] [cursor=pointer]: "# zus"
+            - listitem [ref=e36] [cursor=pointer]: "# vat"
+      - main [ref=e38]:
+        - generic [ref=e39]:
+          - generic [ref=e40]:
+            - generic [ref=e41]: 🦅
+            - generic [ref=e42]:
+              - paragraph [ref=e43]:
+                - text: Cześć! Jestem
+                - strong [ref=e44]: Bielikiem
+                - text: "- polskim asystentem AI dla przedsiębiorców."
+              - paragraph [ref=e45]: "Mogę pomóc Ci z:"
+              - list [ref=e46]:
+                - listitem [ref=e47]:
+                  - strong [ref=e48]: KSeF
+                  - text: "- terminy, wymagania, procedury e-faktur"
+                - listitem [ref=e49]:
+                  - strong [ref=e50]: B2B
+                  - text: "- ryzyko przekwalifikowania umowy na etat"
+                - listitem [ref=e51]:
+                  - strong [ref=e52]: ZUS
+                  - text: "- składki, ubezpieczenia, obliczenia"
+                - listitem [ref=e53]:
+                  - strong [ref=e54]: VAT
+                  - text: "- JPK, VAT OSS, rozliczenia"
+              - paragraph [ref=e55]: Wybierz kanał po lewej i zadaj pytanie!
+          - generic [ref=e56]:
+            - generic [ref=e57]: 👤
+            - paragraph [ref=e59]: Kiedy KSeF będzie obowiązkowy?
+          - generic [ref=e60]:
+            - generic [ref=e61]: 🦅
+            - generic [ref=e62]: ●●○
+        - generic [ref=e63]:
+          - generic [ref=e64]:
+            - textbox "Zadaj pytanie..." [disabled] [ref=e65]
+            - button [disabled] [ref=e66]:
+              - img [ref=e67]
+          - generic [ref=e70]:
+            - generic [ref=e71]: "Moduł: Ogólne"
+            - generic [ref=e72]: 0/2000
+    - generic [ref=e73]:
+      - generic [ref=e75]:
+        - heading "📁 Projekty" [level=3] [ref=e77]
+        - list [ref=e78]:
+          - listitem [ref=e79] [cursor=pointer]:
+            - generic [ref=e80]: 📋
+            - text: Projekt KSeF
+          - listitem [ref=e81] [cursor=pointer]:
+            - generic [ref=e82]: 💼
+            - text: Projekt B2B
+          - listitem [ref=e83] [cursor=pointer]:
+            - generic [ref=e84]: 💰
+            - text: Projekt VAT
+      - generic [ref=e86]:
+        - heading "📄 Pliki projektu" [level=3] [ref=e88]
+        - list
+      - generic [ref=e90]:
+        - generic [ref=e91]:
+          - heading "📚 Dokumenty" [level=3] [ref=e92]
+          - button "Odśwież" [ref=e93] [cursor=pointer]
+        - generic [ref=e94]:
+          - list
+          - generic [ref=e95]:
+            - textbox "Tytuł dokumentu" [ref=e96]
+            - textbox "Kategoria (np. ksef, b2b, zus, vat)" [ref=e97]
+            - textbox "Treść dokumentu..." [ref=e98]
+            - generic [ref=e99]:
+              - button "Nowy" [ref=e100] [cursor=pointer]
+              - button "Usuń" [ref=e101] [cursor=pointer]
+              - button "Zapisz" [ref=e102] [cursor=pointer]
+            - list [ref=e103]
+      - generic [ref=e106]:
+        - generic [ref=e107]:
+          - button "🔗 Źródła danych" [ref=e108] [cursor=pointer]
+          - button "📜 Akty prawne" [ref=e109] [cursor=pointer]
+        - combobox [ref=e111]:
+          - option "Wszystkie" [selected]
+          - option "Urzędowe"
+          - option "Komercyjne"
+        - list [ref=e113]:
+          - listitem [ref=e114]:
+            - generic [ref=e115]:
+              - generic [ref=e116]: 🏛️
+              - generic [ref=e117]: ISAP - Internetowy System Aktów Prawnych
+              - generic [ref=e118]: ✅
+            - generic [ref=e119]: Oficjalne akty prawne publikowane przez Sejm RP
+            - link "https://isap.sejm.gov.pl" [ref=e120] [cursor=pointer]:
+              - /url: https://isap.sejm.gov.pl
+          - listitem [ref=e121]:
+            - generic [ref=e122]:
+              - generic [ref=e123]: 🏛️
+              - generic [ref=e124]: Dziennik Ustaw
+              - generic [ref=e125]: ✅
+            - generic [ref=e126]: Oficjalny dziennik publikacyjny aktów prawnych
+            - link "https://dziennikustaw.gov.pl" [ref=e127] [cursor=pointer]:
+              - /url: https://dziennikustaw.gov.pl
+          - listitem [ref=e128]:
+            - generic [ref=e129]:
+              - generic [ref=e130]: 🏛️
+              - generic [ref=e131]: KSeF - Krajowy System e-Faktur
+              - generic [ref=e132]: ✅
+            - generic [ref=e133]: API Krajowego Systemu e-Faktur
+            - link "https://ksef.mf.gov.pl" [ref=e134] [cursor=pointer]:
+              - /url: https://ksef.mf.gov.pl
+          - listitem [ref=e135]:
+            - generic [ref=e136]:
+              - generic [ref=e137]: 🏛️
+              - generic [ref=e138]: e-Urząd Skarbowy
+              - generic [ref=e139]: ✅
+            - generic [ref=e140]: Portal e-Urzędu Skarbowego
+            - link "https://www.podatki.gov.pl" [ref=e141] [cursor=pointer]:
+              - /url: https://www.podatki.gov.pl
+          - listitem [ref=e142]:
+            - generic [ref=e143]:
+              - generic [ref=e144]: 🏛️
+              - generic [ref=e145]: eZUS - Platforma Usług Elektronicznych
+              - generic [ref=e146]: ✅
+            - generic [ref=e147]: Elektroniczne usługi ZUS
+            - link "https://www.zus.pl" [ref=e148] [cursor=pointer]:
+              - /url: https://www.zus.pl
+          - listitem [ref=e149]:
+            - generic [ref=e150]:
+              - generic [ref=e151]: 🏛️
+              - generic [ref=e152]: CEIDG - Centralna Ewidencja Działalności
+              - generic [ref=e153]: ✅
+            - generic [ref=e154]: API CEIDG do weryfikacji działalności gospodarczych
+            - link "https://dane.biznes.gov.pl/api/ceidg/v2" [ref=e155] [cursor=pointer]:
+              - /url: https://dane.biznes.gov.pl/api/ceidg/v2
+          - listitem [ref=e156]:
+            - generic [ref=e157]:
+              - generic [ref=e158]: 🏛️
+              - generic [ref=e159]: KRS - Krajowy Rejestr Sądowy
+              - generic [ref=e160]: ✅
+            - generic [ref=e161]: API KRS do weryfikacji spółek
+            - link "https://api-krs.ms.gov.pl" [ref=e162] [cursor=pointer]:
+              - /url: https://api-krs.ms.gov.pl
+          - listitem [ref=e163]:
+            - generic [ref=e164]:
+              - generic [ref=e165]: 🏛️
+              - generic [ref=e166]: GUS - API Banku Danych Lokalnych
+              - generic [ref=e167]: ✅
+            - generic [ref=e168]: Dane statystyczne GUS
+            - link "https://bdl.stat.gov.pl/api/v1" [ref=e169] [cursor=pointer]:
+              - /url: https://bdl.stat.gov.pl/api/v1
+          - listitem [ref=e170]:
+            - generic [ref=e171]:
+              - generic [ref=e172]: 🏛️
+              - generic [ref=e173]: VIES - VAT Information Exchange System
+              - generic [ref=e174]: ✅
+            - generic [ref=e175]: Weryfikacja numeru VAT UE
+            - link "https://ec.europa.eu/taxation_customs/vies/rest-api" [ref=e176] [cursor=pointer]:
+              - /url: https://ec.europa.eu/taxation_customs/vies/rest-api
+          - listitem [ref=e177]:
+            - generic [ref=e178]:
+              - generic [ref=e179]: 💼
+              - generic [ref=e180]: LEX - Wolters Kluwer
+              - generic [ref=e181]: 🔑
+            - generic [ref=e182]: Komercyjna baza aktów prawnych i komentarzy
+            - link "https://sip.lex.pl/api" [ref=e183] [cursor=pointer]:
+              - /url: https://sip.lex.pl/api
+          - listitem [ref=e184]:
+            - generic [ref=e185]:
+              - generic [ref=e186]: 💼
+              - generic [ref=e187]: Legalis - C.H. Beck
+              - generic [ref=e188]: 🔑
+            - generic [ref=e189]: Komercyjna baza prawna C.H. Beck
+            - link "https://legalis.pl/api" [ref=e190] [cursor=pointer]:
+              - /url: https://legalis.pl/api
+        - generic [ref=e191]:
+          - heading "🔍 Weryfikacja podmiotu" [level=4] [ref=e192]
+          - generic [ref=e193]:
+            - textbox "NIP, KRS lub VAT UE (np. PL1234567890)" [ref=e194]
+            - combobox [ref=e195]:
+              - option "NIP (CEIDG)" [selected]
+              - option "KRS"
+              - option "VAT UE (VIES)"
+            - button "Sprawdź" [ref=e196] [cursor=pointer]
+```

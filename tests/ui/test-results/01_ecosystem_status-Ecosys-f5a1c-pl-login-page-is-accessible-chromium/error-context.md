@@ -1,0 +1,58 @@
+# Page snapshot
+
+```yaml
+- generic [ref=e3]:
+  - generic [ref=e4]:
+    - generic [ref=e5]:
+      - generic [ref=e6]:
+        - img [ref=e8]
+        - generic [ref=e11]: e-Doręczenia
+      - heading "Bezpiecznie, szybko, elektronicznie" [level=1] [ref=e12]:
+        - text: Bezpiecznie, szybko,
+        - text: elektronicznie
+      - paragraph [ref=e13]:
+        - text: Panel SaaS do zarządzania korespondencją elektroniczną
+        - text: w ramach systemu e-Doręczeń
+      - generic [ref=e14]:
+        - generic [ref=e15]:
+          - generic [ref=e17]: ✓
+          - generic [ref=e18]: Integracja z Proxy IMAP/SMTP
+        - generic [ref=e19]:
+          - generic [ref=e21]: ✓
+          - generic [ref=e22]: Synchronizacja z Middleware Sync
+        - generic [ref=e23]:
+          - generic [ref=e25]: ✓
+          - generic [ref=e26]: DSL do automatyzacji przepływów
+    - generic [ref=e27]:
+      - link "Jak założyć skrzynkę e-Doręczeń?" [ref=e28] [cursor=pointer]:
+        - /url: /guide
+        - img [ref=e29]
+        - generic [ref=e32]: Jak założyć skrzynkę e-Doręczeń?
+      - generic [ref=e33]: © 2024 e-Doręczenia SaaS. Wszystkie prawa zastrzeżone.
+  - generic [ref=e36]:
+    - heading "Zaloguj się" [level=2] [ref=e37]
+    - paragraph [ref=e38]: Wprowadź dane logowania do panelu e-Doręczeń
+    - generic [ref=e39]:
+      - generic [ref=e40]:
+        - generic [ref=e41]: Nazwa użytkownika
+        - generic [ref=e42]:
+          - img [ref=e43]
+          - textbox "np. testuser" [ref=e46]
+      - generic [ref=e47]:
+        - generic [ref=e48]: Hasło
+        - generic [ref=e49]:
+          - img [ref=e50]
+          - textbox "••••••••" [ref=e53]
+      - button "Zaloguj się" [ref=e54] [cursor=pointer]:
+        - generic [ref=e55]: Zaloguj się
+        - img [ref=e56]
+    - generic [ref=e58]:
+      - paragraph [ref=e59]: "Dane testowe do logowania:"
+      - generic [ref=e60]:
+        - generic [ref=e61]:
+          - generic [ref=e62]: Proxy User
+          - generic [ref=e63]: testuser / testpass123
+        - generic [ref=e64]:
+          - generic [ref=e65]: Sync User
+          - generic [ref=e66]: mailuser / mailpass123
+```

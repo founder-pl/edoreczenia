@@ -1,0 +1,107 @@
+# Page snapshot
+
+```yaml
+- generic [ref=e3]:
+  - generic [ref=e5]:
+    - generic [ref=e6]:
+      - heading "IDCard.pl" [level=1] [ref=e7]
+      - paragraph [ref=e8]: Platforma Integracji
+    - navigation [ref=e9]:
+      - link "Dashboard" [ref=e10] [cursor=pointer]:
+        - /url: /
+        - img [ref=e11]
+        - text: Dashboard
+      - link "Skrzynka" [ref=e14] [cursor=pointer]:
+        - /url: /inbox
+        - img [ref=e15]
+        - text: Skrzynka
+      - link "Usługi" [ref=e18] [cursor=pointer]:
+        - /url: /services
+        - img [ref=e19]
+        - text: Usługi
+      - link "Ustawienia" [ref=e22] [cursor=pointer]:
+        - /url: /settings
+        - img [ref=e23]
+        - text: Ustawienia
+    - generic [ref=e26]:
+      - generic [ref=e27]:
+        - img [ref=e29]
+        - generic [ref=e32]:
+          - paragraph [ref=e33]: Journey Test User
+          - paragraph [ref=e34]: journey.1764746780119@test.pl
+      - button "Wyloguj" [ref=e35] [cursor=pointer]:
+        - img [ref=e36]
+        - text: Wyloguj
+  - generic [ref=e39]:
+    - banner [ref=e40]:
+      - button [ref=e43] [cursor=pointer]:
+        - img [ref=e44]
+    - main [ref=e48]:
+      - generic [ref=e49]:
+        - generic [ref=e50]:
+          - heading "Dashboard" [level=1] [ref=e51]
+          - paragraph [ref=e52]: Witaj w IDCard.pl - wszystkie usługi w jednym miejscu
+        - generic [ref=e53]:
+          - generic [ref=e55]:
+            - img [ref=e57]
+            - generic [ref=e60]:
+              - paragraph [ref=e61]: "3"
+              - paragraph [ref=e62]: Aktywne połączenia
+          - generic [ref=e64]:
+            - img [ref=e66]
+            - generic [ref=e69]:
+              - paragraph [ref=e70]: "3"
+              - paragraph [ref=e71]: Nieprzeczytane
+          - generic [ref=e73]:
+            - img [ref=e75]
+            - generic [ref=e78]:
+              - paragraph [ref=e79]: "2"
+              - paragraph [ref=e80]: Powiadomienia
+        - generic [ref=e81]:
+          - heading "Usługi" [level=2] [ref=e82]
+          - generic [ref=e83]:
+            - link "Połączono e-Doręczenia szyfromat.pl" [ref=e84] [cursor=pointer]:
+              - /url: /services/edoreczenia
+              - generic [ref=e85]:
+                - img [ref=e87]
+                - generic [ref=e90]:
+                  - img [ref=e91]
+                  - text: Połączono
+              - heading "e-Doręczenia" [level=3] [ref=e94]
+              - paragraph [ref=e95]: szyfromat.pl
+            - link "Niepołączono Detax AI detax.pl" [ref=e96] [cursor=pointer]:
+              - /url: /services/detax
+              - generic [ref=e97]:
+                - img [ref=e99]
+                - generic [ref=e102]:
+                  - img [ref=e103]
+                  - text: Niepołączono
+              - heading "Detax AI" [level=3] [ref=e106]
+              - paragraph [ref=e107]: detax.pl
+            - link "Niepołączono ePUAP gov.pl" [ref=e108] [cursor=pointer]:
+              - /url: /services/epuap
+              - generic [ref=e109]:
+                - img [ref=e111]
+                - generic [ref=e114]:
+                  - img [ref=e115]
+                  - text: Niepołączono
+              - heading "ePUAP" [level=3] [ref=e118]
+              - paragraph [ref=e119]: gov.pl
+            - link "Niepołączono KSeF mf.gov.pl" [ref=e120] [cursor=pointer]:
+              - /url: /services/ksef
+              - generic [ref=e121]:
+                - img [ref=e123]
+                - generic [ref=e125]:
+                  - img [ref=e126]
+                  - text: Niepołączono
+              - heading "KSeF" [level=3] [ref=e129]
+              - paragraph [ref=e130]: mf.gov.pl
+        - generic [ref=e131]:
+          - heading "Ostatnia aktywność" [level=2] [ref=e132]
+          - generic [ref=e134]:
+            - img [ref=e136]
+            - generic [ref=e139]:
+              - paragraph [ref=e140]: Nowa wiadomość z Urzędu Skarbowego
+              - paragraph [ref=e141]: edoreczenia
+            - img [ref=e142]
+```

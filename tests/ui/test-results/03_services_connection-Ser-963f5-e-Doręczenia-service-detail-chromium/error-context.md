@@ -1,0 +1,65 @@
+# Page snapshot
+
+```yaml
+- generic [ref=e3]:
+  - generic [ref=e5]:
+    - generic [ref=e6]:
+      - heading "IDCard.pl" [level=1] [ref=e7]
+      - paragraph [ref=e8]: Platforma Integracji
+    - navigation [ref=e9]:
+      - link "Dashboard" [ref=e10] [cursor=pointer]:
+        - /url: /
+        - img [ref=e11]
+        - text: Dashboard
+      - link "Skrzynka" [ref=e14] [cursor=pointer]:
+        - /url: /inbox
+        - img [ref=e15]
+        - text: Skrzynka
+      - link "Usługi" [ref=e18] [cursor=pointer]:
+        - /url: /services
+        - img [ref=e19]
+        - text: Usługi
+      - link "Ustawienia" [ref=e22] [cursor=pointer]:
+        - /url: /settings
+        - img [ref=e23]
+        - text: Ustawienia
+    - generic [ref=e26]:
+      - generic [ref=e27]:
+        - img [ref=e29]
+        - generic [ref=e32]:
+          - paragraph [ref=e33]: Demo User
+          - paragraph [ref=e34]: demo@idcard.pl
+      - button "Wyloguj" [ref=e35] [cursor=pointer]:
+        - img [ref=e36]
+        - text: Wyloguj
+  - generic [ref=e39]:
+    - banner [ref=e40]:
+      - button [ref=e43] [cursor=pointer]:
+        - img [ref=e44]
+    - main [ref=e48]:
+      - generic [ref=e49]:
+        - generic [ref=e50]:
+          - link [ref=e51] [cursor=pointer]:
+            - /url: /services
+            - img [ref=e52]
+          - img [ref=e55]
+          - generic [ref=e58]:
+            - heading "e-Doręczenia" [level=1] [ref=e59]
+            - paragraph [ref=e60]: Oficjalna korespondencja elektroniczna z urzędami
+        - generic [ref=e62]:
+          - generic [ref=e63]:
+            - heading "Status połączenia" [level=2] [ref=e64]
+            - generic [ref=e65]:
+              - img [ref=e66]
+              - generic [ref=e69]: Połączono
+              - generic [ref=e70]: (AE:PL-12345-67890-ABCDE-12)
+          - generic [ref=e71]:
+            - link "Otwórz e-Doręczenia" [ref=e72] [cursor=pointer]:
+              - /url: http://localhost:8500/sso?token=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJ1c2VyLWRlbW8iLCJlbWFpbCI6ImRlbW9AaWRjYXJkLnBsIiwiZXhwIjoxNzY0ODMzMTc2LCJpYXQiOjE3NjQ3NDY3NzYsImlzcyI6ImlkY2FyZC5wbCJ9.fLf0qalfbvUUqPk562Lhalq14VlRiUVJHyCDxZjdPIs&redirect=/
+            - button "Rozłącz" [ref=e73] [cursor=pointer]
+        - generic [ref=e74]:
+          - heading "Wiadomości z e-Doręczenia" [level=2] [ref=e75]
+          - generic [ref=e77]:
+            - img [ref=e78]
+            - paragraph [ref=e81]: Brak wiadomości
+```
