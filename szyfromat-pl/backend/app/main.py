@@ -728,6 +728,16 @@ async def mark_as_read(message_id: str, token_data: dict = Depends(verify_jwt_to
     """Oznacz wiadomość jako przeczytaną"""
     return {"status": "read", "messageId": message_id}
 
+@app.post("/api/messages/{message_id}/star")
+async def toggle_star(message_id: str, token_data: dict = Depends(verify_jwt_token)):
+    """Oznacz/odznacz wiadomość gwiazdką"""
+    return {"status": "starred", "messageId": message_id, "starred": True}
+
+@app.post("/api/messages/{message_id}/unstar")
+async def remove_star(message_id: str, token_data: dict = Depends(verify_jwt_token)):
+    """Usuń gwiazdkę z wiadomości"""
+    return {"status": "unstarred", "messageId": message_id, "starred": False}
+
 # ═══════════════════════════════════════════════════════════════
 # FOLDERS ENDPOINTS
 # ═══════════════════════════════════════════════════════════════

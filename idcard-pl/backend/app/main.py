@@ -82,11 +82,108 @@ security = HTTPBearer()
 
 class ServiceType(str, Enum):
     EDORECZENIA = "edoreczenia"
+    DETAX = "detax"
     EPUAP = "epuap"
     KSEF = "ksef"
     MOBYWATEL = "mobywatel"
     CEPIK = "cepik"
     CEIDG = "ceidg"
+
+class IdentityType(str, Enum):
+    """Typ tożsamości w wallet"""
+    PERSONAL = "personal"       # Osoba fizyczna
+    COMPANY = "company"         # Firma
+    EMPLOYEE = "employee"       # Pracownik firmy
+    FAMILY = "family"           # Członek rodziny
+    CHILD = "child"             # Dziecko (opiekun)
+    REPRESENTATIVE = "representative"  # Pełnomocnik
+
+class AuthorizationType(str, Enum):
+    """Typ upoważnienia"""
+    FULL = "full"                       # Pełne pełnomocnictwo
+    ACCOUNTING = "accounting"           # Księgowość (ZUS, US, e-Faktury)
+    LEGAL = "legal"                     # Prawne (sądy, urzędy)
+    TAX = "tax"                         # Podatkowe (US, KSeF)
+    HR = "hr"                           # Kadry (ZUS, PIP)
+    EDORECZENIA = "edoreczenia"         # Tylko e-Doręczenia
+    EPUAP = "epuap"                     # Tylko ePUAP
+    KSEF = "ksef"                       # Tylko KSeF
+    READ_ONLY = "read_only"             # Tylko odczyt
+    CUSTOM = "custom"                   # Własne uprawnienia
+
+class AuthorizationStatus(str, Enum):
+    """Status upoważnienia"""
+    PENDING = "pending"           # Oczekuje na akceptację
+    ACTIVE = "active"             # Aktywne
+    EXPIRED = "expired"           # Wygasłe
+    REVOKED = "revoked"           # Odwołane
+    REJECTED = "rejected"         # Odrzucone
+
+class Authorization(BaseModel):
+    """Upoważnienie do działania w imieniu innej tożsamości"""
+    id: str
+    
+    # Kto upoważnia (mocodawca)
+    grantor_user_id: str          # ID użytkownika upoważniającego
+    grantor_identity_id: str      # ID tożsamości upoważniającej
+    grantor_name: str             # Nazwa mocodawcy (do wyświetlenia)
+    
+    # Kto jest upoważniony (pełnomocnik)
+    grantee_user_id: str          # ID użytkownika upoważnionego
+    grantee_email: str            # Email pełnomocnika
+    grantee_name: Optional[str] = None
+    
+    # Szczegóły upoważnienia
+    type: AuthorizationType
+    title: str                    # np. "Pełnomocnictwo do spraw księgowych"
+    description: Optional[str] = None
+    
+    # Zakres uprawnień
+    permissions: List[str] = []   # Lista konkretnych uprawnień
+    services: List[str] = []      # Lista usług (edoreczenia, ksef, epuap)
+    
+    # Ważność
+    valid_from: datetime
+    valid_until: Optional[datetime] = None  # None = bezterminowe
+    
+    # Status
+    status: AuthorizationStatus = AuthorizationStatus.PENDING
+    
+    # Metadane
+    created_at: datetime
+    accepted_at: Optional[datetime] = None
+    revoked_at: Optional[datetime] = None
+    revoke_reason: Optional[str] = None
+    
+    # Dokument pełnomocnictwa (opcjonalny)
+    document_id: Optional[str] = None
+    document_url: Optional[str] = None
+
+class Identity(BaseModel):
+    """Tożsamość w wallet IDCard.pl"""
+    id: str
+    type: IdentityType
+    name: str                   # Imię i nazwisko / Nazwa firmy
+    country: str = "PL"         # Kod kraju
+    
+    # Identyfikatory (opcjonalne, zależne od typu)
+    pesel: Optional[str] = None
+    nip: Optional[str] = None
+    krs: Optional[str] = None
+    regon: Optional[str] = None
+    
+    # Adresy usług
+    ade_address: Optional[str] = None  # e-Doręczenia (AE:PL-...)
+    epuap_address: Optional[str] = None  # ePUAP
+    
+    # Metadane
+    is_default: bool = False
+    is_verified: bool = False
+    created_at: datetime = None
+    
+    # Relacja (dla pracowników, rodziny)
+    parent_identity_id: Optional[str] = None
+    role: Optional[str] = None  # np. "właściciel", "księgowy", "dziecko"
 
 class ServiceStatus(str, Enum):
     ACTIVE = "active"
@@ -173,6 +270,10 @@ users_db: Dict[str, Dict] = {}
 connections_db: Dict[str, List[ServiceConnection]] = {}
 notifications_db: Dict[str, List[UnifiedNotification]] = {}
 email_aliases_db: Dict[str, EmailAlias] = {}  # alias -> EmailAlias
+identities_db: Dict[str, List[Identity]] = {}  # user_id -> List[Identity]
+authorizations_db: Dict[str, Authorization] = {}  # auth_id -> Authorization
+user_authorizations_granted: Dict[str, List[str]] = {}  # user_id -> List[auth_id] (udzielone)
+user_authorizations_received: Dict[str, List[str]] = {}  # user_id -> List[auth_id] (otrzymane)
 
 def generate_email_aliases(user_id: str, email: str, nip: str = None, krs: str = None, 
                            ade_address: str = None, company_name: str = None) -> List[str]:
@@ -622,6 +723,498 @@ async def activate_detax_subscription(
         "status": "active",
         "subscription_id": subscription_id,
         "message": "Subskrypcja Detax.pl aktywna! Nielimitowane zapytania."
+    }
+
+# ═══════════════════════════════════════════════════════════════
+# IDENTITY WALLET - Zarządzanie tożsamościami
+# ═══════════════════════════════════════════════════════════════
+
+class CreateIdentityRequest(BaseModel):
+    type: IdentityType
+    name: str
+    country: str = "PL"
+    pesel: Optional[str] = None
+    nip: Optional[str] = None
+    krs: Optional[str] = None
+    regon: Optional[str] = None
+    ade_address: Optional[str] = None
+    epuap_address: Optional[str] = None
+    role: Optional[str] = None
+    parent_identity_id: Optional[str] = None
+
+@app.get("/api/identities")
+async def list_identities(token_data: dict = Depends(verify_jwt_token)):
+    """Lista tożsamości użytkownika (wallet)"""
+    user_id = token_data["sub"]
+    identities = identities_db.get(user_id, [])
+    
+    # Jeśli brak tożsamości, utwórz domyślną z danych użytkownika
+    if not identities and user_id in users_db:
+        user = users_db[user_id]
+        default_identity = Identity(
+            id=f"id-{uuid.uuid4().hex[:8]}",
+            type=IdentityType.PERSONAL,
+            name=user.get("name", "Użytkownik"),
+            country="PL",
+            nip=user.get("nip"),
+            krs=user.get("krs"),
+            ade_address=user.get("ade_address"),
+            is_default=True,
+            is_verified=False,
+            created_at=datetime.utcnow()
+        )
+        identities_db[user_id] = [default_identity]
+        identities = [default_identity]
+    
+    return {
+        "identities": [i.dict() for i in identities],
+        "default_identity_id": next((i.id for i in identities if i.is_default), None)
+    }
+
+@app.post("/api/identities")
+async def create_identity(
+    request: CreateIdentityRequest,
+    token_data: dict = Depends(verify_jwt_token)
+):
+    """Dodaj nową tożsamość do wallet"""
+    user_id = token_data["sub"]
+    
+    identity = Identity(
+        id=f"id-{uuid.uuid4().hex[:8]}",
+        type=request.type,
+        name=request.name,
+        country=request.country,
+        pesel=request.pesel,
+        nip=request.nip,
+        krs=request.krs,
+        regon=request.regon,
+        ade_address=request.ade_address,
+        epuap_address=request.epuap_address,
+        role=request.role,
+        parent_identity_id=request.parent_identity_id,
+        is_default=len(identities_db.get(user_id, [])) == 0,
+        is_verified=False,
+        created_at=datetime.utcnow()
+    )
+    
+    if user_id not in identities_db:
+        identities_db[user_id] = []
+    identities_db[user_id].append(identity)
+    
+    return {"identity": identity.dict(), "message": "Tożsamość dodana do wallet"}
+
+@app.put("/api/identities/{identity_id}")
+async def update_identity(
+    identity_id: str,
+    request: CreateIdentityRequest,
+    token_data: dict = Depends(verify_jwt_token)
+):
+    """Aktualizuj tożsamość"""
+    user_id = token_data["sub"]
+    
+    for i, identity in enumerate(identities_db.get(user_id, [])):
+        if identity.id == identity_id:
+            identities_db[user_id][i] = Identity(
+                id=identity_id,
+                type=request.type,
+                name=request.name,
+                country=request.country,
+                pesel=request.pesel,
+                nip=request.nip,
+                krs=request.krs,
+                regon=request.regon,
+                ade_address=request.ade_address,
+                epuap_address=request.epuap_address,
+                role=request.role,
+                parent_identity_id=request.parent_identity_id,
+                is_default=identity.is_default,
+                is_verified=identity.is_verified,
+                created_at=identity.created_at
+            )
+            return {"identity": identities_db[user_id][i].dict()}
+    
+    raise HTTPException(status_code=404, detail="Tożsamość nie znaleziona")
+
+@app.delete("/api/identities/{identity_id}")
+async def delete_identity(
+    identity_id: str,
+    token_data: dict = Depends(verify_jwt_token)
+):
+    """Usuń tożsamość z wallet"""
+    user_id = token_data["sub"]
+    
+    identities = identities_db.get(user_id, [])
+    for i, identity in enumerate(identities):
+        if identity.id == identity_id:
+            if identity.is_default and len(identities) > 1:
+                raise HTTPException(status_code=400, detail="Nie można usunąć domyślnej tożsamości")
+            identities_db[user_id].pop(i)
+            return {"message": "Tożsamość usunięta"}
+    
+    raise HTTPException(status_code=404, detail="Tożsamość nie znaleziona")
+
+@app.post("/api/identities/{identity_id}/set-default")
+async def set_default_identity(
+    identity_id: str,
+    token_data: dict = Depends(verify_jwt_token)
+):
+    """Ustaw tożsamość jako domyślną"""
+    user_id = token_data["sub"]
+    
+    found = False
+    for identity in identities_db.get(user_id, []):
+        if identity.id == identity_id:
+            identity.is_default = True
+            found = True
+        else:
+            identity.is_default = False
+    
+    if not found:
+        raise HTTPException(status_code=404, detail="Tożsamość nie znaleziona")
+    
+    return {"message": "Domyślna tożsamość zmieniona"}
+
+@app.get("/api/identities/{identity_id}/ade-address")
+async def get_identity_ade_address(
+    identity_id: str,
+    token_data: dict = Depends(verify_jwt_token)
+):
+    """Pobierz adres e-Doręczeń dla tożsamości"""
+    user_id = token_data["sub"]
+    
+    for identity in identities_db.get(user_id, []):
+        if identity.id == identity_id:
+            if identity.ade_address:
+                return {"ade_address": identity.ade_address}
+            else:
+                return {"ade_address": None, "message": "Brak adresu e-Doręczeń dla tej tożsamości"}
+    
+    raise HTTPException(status_code=404, detail="Tożsamość nie znaleziona")
+
+# ═══════════════════════════════════════════════════════════════
+# AUTHORIZATIONS - Upoważnienia i pełnomocnictwa
+# ═══════════════════════════════════════════════════════════════
+
+class CreateAuthorizationRequest(BaseModel):
+    """Request do utworzenia upoważnienia"""
+    identity_id: str              # Tożsamość upoważniająca
+    grantee_email: str            # Email pełnomocnika
+    type: AuthorizationType
+    title: str
+    description: Optional[str] = None
+    permissions: List[str] = []
+    services: List[str] = []      # np. ["edoreczenia", "ksef"]
+    valid_from: Optional[datetime] = None
+    valid_until: Optional[datetime] = None
+
+# Predefiniowane zestawy uprawnień
+AUTHORIZATION_PRESETS = {
+    AuthorizationType.FULL: {
+        "permissions": ["read", "write", "send", "sign", "manage"],
+        "services": ["edoreczenia", "epuap", "ksef", "detax"]
+    },
+    AuthorizationType.ACCOUNTING: {
+        "permissions": ["read", "write", "send"],
+        "services": ["edoreczenia", "ksef", "detax"]
+    },
+    AuthorizationType.LEGAL: {
+        "permissions": ["read", "write", "send", "sign"],
+        "services": ["edoreczenia", "epuap"]
+    },
+    AuthorizationType.TAX: {
+        "permissions": ["read", "write", "send"],
+        "services": ["ksef", "detax"]
+    },
+    AuthorizationType.HR: {
+        "permissions": ["read", "write", "send"],
+        "services": ["edoreczenia", "epuap"]
+    },
+    AuthorizationType.EDORECZENIA: {
+        "permissions": ["read", "write", "send"],
+        "services": ["edoreczenia"]
+    },
+    AuthorizationType.KSEF: {
+        "permissions": ["read", "write", "send"],
+        "services": ["ksef"]
+    },
+    AuthorizationType.READ_ONLY: {
+        "permissions": ["read"],
+        "services": ["edoreczenia", "epuap", "ksef", "detax"]
+    }
+}
+
+@app.get("/api/authorizations")
+async def list_authorizations(token_data: dict = Depends(verify_jwt_token)):
+    """Lista upoważnień użytkownika (udzielonych i otrzymanych)"""
+    user_id = token_data["sub"]
+    
+    # Upoważnienia udzielone przez użytkownika
+    granted_ids = user_authorizations_granted.get(user_id, [])
+    granted = [authorizations_db[aid].dict() for aid in granted_ids if aid in authorizations_db]
+    
+    # Upoważnienia otrzymane przez użytkownika
+    received_ids = user_authorizations_received.get(user_id, [])
+    received = [authorizations_db[aid].dict() for aid in received_ids if aid in authorizations_db]
+    
+    return {
+        "granted": granted,      # Udzielone innym
+        "received": received,    # Otrzymane od innych
+        "total_granted": len(granted),
+        "total_received": len(received),
+        "active_received": len([a for a in received if a["status"] == "active"])
+    }
+
+@app.post("/api/authorizations")
+async def create_authorization(
+    request: CreateAuthorizationRequest,
+    token_data: dict = Depends(verify_jwt_token)
+):
+    """Utwórz nowe upoważnienie (pełnomocnictwo)"""
+    user_id = token_data["sub"]
+    
+    # Sprawdź czy tożsamość należy do użytkownika
+    identity = None
+    for i in identities_db.get(user_id, []):
+        if i.id == request.identity_id:
+            identity = i
+            break
+    
+    if not identity:
+        raise HTTPException(status_code=404, detail="Tożsamość nie znaleziona")
+    
+    # Znajdź użytkownika po email (pełnomocnika)
+    grantee_user_id = None
+    grantee_name = None
+    for uid, user in users_db.items():
+        if user.get("email") == request.grantee_email:
+            grantee_user_id = uid
+            grantee_name = user.get("name")
+            break
+    
+    # Użyj predefiniowanych uprawnień jeśli nie podano
+    preset = AUTHORIZATION_PRESETS.get(request.type, {})
+    permissions = request.permissions or preset.get("permissions", [])
+    services = request.services or preset.get("services", [])
+    
+    auth_id = f"auth-{uuid.uuid4().hex[:8]}"
+    authorization = Authorization(
+        id=auth_id,
+        grantor_user_id=user_id,
+        grantor_identity_id=request.identity_id,
+        grantor_name=identity.name,
+        grantee_user_id=grantee_user_id or f"pending-{request.grantee_email}",
+        grantee_email=request.grantee_email,
+        grantee_name=grantee_name,
+        type=request.type,
+        title=request.title,
+        description=request.description,
+        permissions=permissions,
+        services=services,
+        valid_from=request.valid_from or datetime.utcnow(),
+        valid_until=request.valid_until,
+        status=AuthorizationStatus.PENDING,
+        created_at=datetime.utcnow()
+    )
+    
+    # Zapisz
+    authorizations_db[auth_id] = authorization
+    
+    if user_id not in user_authorizations_granted:
+        user_authorizations_granted[user_id] = []
+    user_authorizations_granted[user_id].append(auth_id)
+    
+    # Jeśli pełnomocnik ma konto, dodaj do jego otrzymanych
+    if grantee_user_id and not grantee_user_id.startswith("pending-"):
+        if grantee_user_id not in user_authorizations_received:
+            user_authorizations_received[grantee_user_id] = []
+        user_authorizations_received[grantee_user_id].append(auth_id)
+        
+        # Dodaj powiadomienie
+        add_notification(
+            grantee_user_id,
+            ServiceType.EDORECZENIA,
+            "authorization",
+            "Nowe upoważnienie",
+            f"{identity.name} udzielił Ci upoważnienia: {request.title}",
+            f"/authorizations/{auth_id}"
+        )
+    
+    return {
+        "authorization": authorization.dict(),
+        "message": "Upoważnienie utworzone" + (" i wysłane do pełnomocnika" if grantee_user_id else ". Pełnomocnik zostanie powiadomiony po rejestracji.")
+    }
+
+@app.post("/api/authorizations/{auth_id}/accept")
+async def accept_authorization(
+    auth_id: str,
+    token_data: dict = Depends(verify_jwt_token)
+):
+    """Akceptuj otrzymane upoważnienie"""
+    user_id = token_data["sub"]
+    
+    if auth_id not in authorizations_db:
+        raise HTTPException(status_code=404, detail="Upoważnienie nie znalezione")
+    
+    auth = authorizations_db[auth_id]
+    
+    # Sprawdź czy użytkownik jest pełnomocnikiem
+    user = users_db.get(user_id, {})
+    if auth.grantee_email != user.get("email") and auth.grantee_user_id != user_id:
+        raise HTTPException(status_code=403, detail="Brak uprawnień")
+    
+    if auth.status != AuthorizationStatus.PENDING:
+        raise HTTPException(status_code=400, detail=f"Upoważnienie ma status: {auth.status}")
+    
+    # Akceptuj
+    auth.status = AuthorizationStatus.ACTIVE
+    auth.accepted_at = datetime.utcnow()
+    auth.grantee_user_id = user_id
+    auth.grantee_name = user.get("name")
+    
+    # Dodaj do otrzymanych jeśli jeszcze nie ma
+    if user_id not in user_authorizations_received:
+        user_authorizations_received[user_id] = []
+    if auth_id not in user_authorizations_received[user_id]:
+        user_authorizations_received[user_id].append(auth_id)
+    
+    # Powiadom mocodawcę
+    add_notification(
+        auth.grantor_user_id,
+        ServiceType.EDORECZENIA,
+        "authorization",
+        "Upoważnienie zaakceptowane",
+        f"{auth.grantee_name or auth.grantee_email} zaakceptował upoważnienie: {auth.title}",
+        f"/authorizations/{auth_id}"
+    )
+    
+    return {"message": "Upoważnienie zaakceptowane", "authorization": auth.dict()}
+
+@app.post("/api/authorizations/{auth_id}/reject")
+async def reject_authorization(
+    auth_id: str,
+    reason: Optional[str] = None,
+    token_data: dict = Depends(verify_jwt_token)
+):
+    """Odrzuć otrzymane upoważnienie"""
+    user_id = token_data["sub"]
+    
+    if auth_id not in authorizations_db:
+        raise HTTPException(status_code=404, detail="Upoważnienie nie znalezione")
+    
+    auth = authorizations_db[auth_id]
+    user = users_db.get(user_id, {})
+    
+    if auth.grantee_email != user.get("email") and auth.grantee_user_id != user_id:
+        raise HTTPException(status_code=403, detail="Brak uprawnień")
+    
+    auth.status = AuthorizationStatus.REJECTED
+    auth.revoke_reason = reason
+    
+    return {"message": "Upoważnienie odrzucone"}
+
+@app.post("/api/authorizations/{auth_id}/revoke")
+async def revoke_authorization(
+    auth_id: str,
+    reason: Optional[str] = None,
+    token_data: dict = Depends(verify_jwt_token)
+):
+    """Odwołaj udzielone upoważnienie (przez mocodawcę)"""
+    user_id = token_data["sub"]
+    
+    if auth_id not in authorizations_db:
+        raise HTTPException(status_code=404, detail="Upoważnienie nie znalezione")
+    
+    auth = authorizations_db[auth_id]
+    
+    if auth.grantor_user_id != user_id:
+        raise HTTPException(status_code=403, detail="Tylko mocodawca może odwołać upoważnienie")
+    
+    auth.status = AuthorizationStatus.REVOKED
+    auth.revoked_at = datetime.utcnow()
+    auth.revoke_reason = reason
+    
+    # Powiadom pełnomocnika
+    if auth.grantee_user_id and not auth.grantee_user_id.startswith("pending-"):
+        add_notification(
+            auth.grantee_user_id,
+            ServiceType.EDORECZENIA,
+            "authorization",
+            "Upoważnienie odwołane",
+            f"Upoważnienie '{auth.title}' od {auth.grantor_name} zostało odwołane",
+            None
+        )
+    
+    return {"message": "Upoważnienie odwołane"}
+
+@app.get("/api/authorizations/{auth_id}")
+async def get_authorization(
+    auth_id: str,
+    token_data: dict = Depends(verify_jwt_token)
+):
+    """Pobierz szczegóły upoważnienia"""
+    user_id = token_data["sub"]
+    
+    if auth_id not in authorizations_db:
+        raise HTTPException(status_code=404, detail="Upoważnienie nie znalezione")
+    
+    auth = authorizations_db[auth_id]
+    
+    # Sprawdź czy użytkownik ma dostęp
+    if auth.grantor_user_id != user_id and auth.grantee_user_id != user_id:
+        raise HTTPException(status_code=403, detail="Brak dostępu")
+    
+    return {"authorization": auth.dict()}
+
+@app.get("/api/authorizations/active-identities")
+async def get_active_authorized_identities(token_data: dict = Depends(verify_jwt_token)):
+    """
+    Pobierz listę tożsamości, do których użytkownik ma aktywne upoważnienia.
+    Używane do przełączania kontekstu (działanie w imieniu klienta).
+    """
+    user_id = token_data["sub"]
+    
+    authorized_identities = []
+    
+    # Pobierz aktywne upoważnienia
+    for auth_id in user_authorizations_received.get(user_id, []):
+        auth = authorizations_db.get(auth_id)
+        if auth and auth.status == AuthorizationStatus.ACTIVE:
+            # Sprawdź ważność
+            if auth.valid_until and auth.valid_until < datetime.utcnow():
+                auth.status = AuthorizationStatus.EXPIRED
+                continue
+            
+            authorized_identities.append({
+                "authorization_id": auth.id,
+                "identity_id": auth.grantor_identity_id,
+                "identity_name": auth.grantor_name,
+                "type": auth.type,
+                "title": auth.title,
+                "permissions": auth.permissions,
+                "services": auth.services,
+                "valid_until": auth.valid_until.isoformat() if auth.valid_until else None
+            })
+    
+    return {
+        "authorized_identities": authorized_identities,
+        "count": len(authorized_identities)
+    }
+
+@app.get("/api/authorization-types")
+async def list_authorization_types():
+    """Lista dostępnych typów upoważnień z opisami"""
+    return {
+        "types": [
+            {"type": "full", "name": "Pełne pełnomocnictwo", "description": "Wszystkie uprawnienia do wszystkich usług"},
+            {"type": "accounting", "name": "Księgowość", "description": "Dostęp do e-Doręczeń, KSeF, Detax AI"},
+            {"type": "legal", "name": "Prawne", "description": "Dostęp do e-Doręczeń, ePUAP, podpisywanie"},
+            {"type": "tax", "name": "Podatkowe", "description": "Dostęp do KSeF, Detax AI"},
+            {"type": "hr", "name": "Kadry i płace", "description": "Dostęp do e-Doręczeń, ePUAP (ZUS, PIP)"},
+            {"type": "edoreczenia", "name": "e-Doręczenia", "description": "Tylko e-Doręczenia"},
+            {"type": "ksef", "name": "KSeF", "description": "Tylko Krajowy System e-Faktur"},
+            {"type": "read_only", "name": "Tylko odczyt", "description": "Podgląd bez możliwości edycji"},
+            {"type": "custom", "name": "Własne", "description": "Własny zestaw uprawnień"}
+        ]
     }
 
 # ═══════════════════════════════════════════════════════════════

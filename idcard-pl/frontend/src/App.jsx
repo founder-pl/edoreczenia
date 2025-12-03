@@ -517,21 +517,45 @@ function ServicesPage() {
   }, []);
   
   const handleConnect = async (serviceType) => {
-    const adeAddress = prompt('Podaj adres e-Doręczeń (AE:PL-...)');
-    if (!adeAddress) return;
+    // Detax - bezpośrednie SSO (nie wymaga połączenia w IDCard)
+    if (serviceType === 'detax') {
+      const token = localStorage.getItem('idcard_token');
+      window.open(`http://localhost:8005/sso?token=${token}&redirect=/`, '_blank');
+      return;
+    }
     
+    // e-Doręczenia - wymaga adresu ADE
+    if (serviceType === 'edoreczenia') {
+      const adeAddress = prompt('Podaj adres e-Doręczeń (AE:PL-...)\n\nJeśli nie masz adresu, możesz go założyć przez IDCard.pl');
+      if (!adeAddress) return;
+      
+      try {
+        const result = await api.services.connect({
+          service_type: serviceType,
+          credentials: { ade_address: adeAddress },
+          config: { auth_method: 'oauth2' }
+        });
+        alert(`Połączenie utworzone! ID: ${result.connection_id}`);
+        const connectionsData = await api.services.connections();
+        setConnections(connectionsData.connections || []);
+      } catch (err) {
+        alert(`Błąd połączenia: ${err.response?.data?.detail || err.message}`);
+      }
+      return;
+    }
+    
+    // Inne usługi - domyślne połączenie
     try {
       const result = await api.services.connect({
         service_type: serviceType,
-        credentials: { ade_address: adeAddress },
-        config: { auth_method: 'oauth2' }
+        credentials: {},
+        config: {}
       });
-      alert(`Połączenie utworzone! ID: ${result.connection_id}`);
-      // Refresh
+      alert(`Połączono z ${serviceType}!`);
       const connectionsData = await api.services.connections();
       setConnections(connectionsData.connections || []);
     } catch (err) {
-      alert(`Błąd: ${err.message}`);
+      alert(`Błąd: ${err.response?.data?.detail || err.message}`);
     }
   };
   
