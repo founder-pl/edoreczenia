@@ -8,6 +8,36 @@ export function AuthProvider({ children }) {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
+    // Sprawdź SSO token z URL
+    const urlParams = new URLSearchParams(window.location.search);
+    const ssoToken = urlParams.get('sso_token');
+    
+    if (ssoToken) {
+      // SSO login - zapisz token i pobierz dane użytkownika
+      localStorage.setItem('token', ssoToken);
+      
+      // Dekoduj token aby uzyskać dane użytkownika
+      try {
+        const payload = JSON.parse(atob(ssoToken.split('.')[1]));
+        const ssoUser = {
+          id: payload.sub,
+          email: payload.email,
+          name: payload.email?.split('@')[0] || 'User',
+          sso: true
+        };
+        localStorage.setItem('user', JSON.stringify(ssoUser));
+        setUser(ssoUser);
+        
+        // Usuń token z URL
+        window.history.replaceState({}, document.title, window.location.pathname);
+      } catch (e) {
+        console.error('SSO token decode error:', e);
+      }
+      setLoading(false);
+      return;
+    }
+    
+    // Normalne sprawdzenie tokena
     const token = localStorage.getItem('token');
     const savedUser = localStorage.getItem('user');
     

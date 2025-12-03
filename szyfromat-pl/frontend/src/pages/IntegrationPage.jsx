@@ -19,8 +19,11 @@ const authMethods = [
   { id: 'certificate', name: 'Certyfikat kwalifikowany', description: 'Certyfikat kwalifikowany (Certum, KIR)' },
 ];
 
+// URL-e dla wersji dev (localhost) i produkcyjnej
+const isDev = window.location.hostname === 'localhost';
+
 const providers = [
-  { id: 'idcard', name: 'IDCard.pl', url: 'https://idcard.pl/' },
+  { id: 'idcard', name: 'IDCard.pl', url: isDev ? 'http://localhost:4100' : 'https://idcard.pl/' },
   { id: 'poczta_polska', name: 'Poczta Polska', url: 'https://edoreczenia.poczta-polska.pl/' },
 ];
 

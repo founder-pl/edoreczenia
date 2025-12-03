@@ -28,6 +28,7 @@ from .services.message_service import message_service
 from .services.integration_service import integration_service
 from .services.user_service import user_service
 from .services.mailbox_connector import mailbox_connector, MailboxConnection
+from .services.mail_service import mail_service, seed_demo_messages
 
 # CQRS imports
 from .cqrs.commands import (
@@ -351,11 +352,33 @@ async def get_messages(
     offset: int = 0,
     token_data: dict = Depends(verify_jwt_token)
 ):
-    """Pobierz listę wiadomości z wybranego folderu - SQLite + demo data"""
+    """Pobierz listę wiadomości z wybranego folderu - IMAP + SQLite + demo data"""
     user_id = token_data["sub"]
     result_messages = []
     
-    # 1. Pobierz wiadomości z SQLite
+    # 1. Pobierz wiadomości z IMAP (Mailpit)
+    try:
+        imap_folder = "INBOX" if folder == "inbox" else folder.upper()
+        imap_messages = mail_service.fetch_messages(folder=imap_folder, limit=limit)
+        
+        for msg in imap_messages:
+            result_messages.append(MessageResponse(
+                id=msg["id"],
+                subject=msg["subject"],
+                sender={"address": msg["from"], "name": msg["from"].split("<")[0].strip() if "<" in msg["from"] else msg["from"]},
+                recipient={"address": msg["to"]} if msg.get("to") else None,
+                status="RECEIVED" if folder == "inbox" else "SENT",
+                receivedAt=datetime.fromisoformat(msg["date"].replace("Z", "+00:00")) if msg.get("date") else datetime.now(),
+                content=msg.get("body", ""),
+                attachments=[{"filename": a["filename"], "size": a["size"]} for a in msg.get("attachments", [])]
+            ))
+        
+        if result_messages:
+            print(f"Fetched {len(result_messages)} messages from IMAP")
+    except Exception as e:
+        print(f"IMAP unavailable: {e}")
+    
+    # 2. Pobierz wiadomości z SQLite
     db_messages = message_service.get_messages(
         user_id=user_id,
         folder=folder,
@@ -376,7 +399,7 @@ async def get_messages(
             attachments=msg.attachments or []
         ))
     
-    # 2. Próba pobrania z zewnętrznego API
+    # 3. Próba pobrania z zewnętrznego API
     try:
         api_token = await get_api_token(config.PROXY_API_URL)
         async with httpx.AsyncClient(timeout=3.0) as client:
@@ -1152,16 +1175,94 @@ async def get_connection_methods():
 
 
 # ═══════════════════════════════════════════════════════════════
+# SSO - Single Sign-On from IDCard.pl
+# ═══════════════════════════════════════════════════════════════
+
+@app.get("/sso")
+async def sso_login(token: str, redirect: str = "/"):
+    """
+    SSO endpoint - loguje użytkownika tokenem z IDCard.pl
+    Przekierowuje do frontendu z tokenem w URL
+    """
+    # Wspólny sekret SSO dla ekosystemu (w produkcji: osobny serwis auth)
+    SSO_SECRET = os.getenv("SSO_SECRET", "idcard-secret-key-change-in-production")
+    
+    try:
+        # Weryfikuj token z IDCard.pl (używamy ich sekretu)
+        payload = jwt.decode(token, SSO_SECRET, algorithms=["HS256"])
+        user_id = payload.get("sub")
+        email = payload.get("email")
+        
+        if not user_id:
+            raise HTTPException(status_code=401, detail="Invalid token")
+        
+        # Utwórz lokalny token dla Szyfromat
+        local_token = jwt.encode({
+            "sub": user_id,
+            "email": email,
+            "exp": datetime.utcnow() + timedelta(hours=24),
+            "iat": datetime.utcnow(),
+            "iss": "szyfromat.pl",
+            "sso_from": "idcard.pl"
+        }, config.JWT_SECRET, algorithm="HS256")
+        
+        # Przekieruj do frontendu z tokenem
+        from starlette.responses import RedirectResponse
+        frontend_url = f"http://localhost:3500{redirect}?sso_token={local_token}"
+        return RedirectResponse(url=frontend_url, status_code=302)
+        
+    except jwt.ExpiredSignatureError:
+        raise HTTPException(status_code=401, detail="Token expired")
+    except jwt.InvalidTokenError:
+        raise HTTPException(status_code=401, detail="Invalid token")
+
+# MAIL ENDPOINTS
+# ═══════════════════════════════════════════════════════════════
+
+@app.post("/api/mail/seed")
+async def seed_mail():
+    """Wyślij demo wiadomości do skrzynki Mailpit"""
+    try:
+        count = seed_demo_messages()
+        return {"status": "ok", "messages_sent": count}
+    except Exception as e:
+        return {"status": "error", "error": str(e)}
+
+@app.get("/api/mail/status")
+async def mail_status():
+    """Sprawdź status serwera mail"""
+    try:
+        folders = mail_service.get_folders()
+        messages = mail_service.fetch_messages(limit=5)
+        return {
+            "status": "connected",
+            "smtp_host": mail_service.config.SMTP_HOST,
+            "imap_host": mail_service.config.IMAP_HOST,
+            "folders": folders,
+            "recent_messages": len(messages)
+        }
+    except Exception as e:
+        return {"status": "error", "error": str(e)}
+
 # HEALTH & INFO
 # ═══════════════════════════════════════════════════════════════
 
 @app.get("/health")
 async def health_check():
     """Health check endpoint"""
+    # Sprawdź połączenie z Mailpit
+    mail_ok = False
+    try:
+        mail_service.get_folders()
+        mail_ok = True
+    except:
+        pass
+    
     return {
         "status": "healthy",
         "service": "e-Doręczenia SaaS",
         "version": "1.0.0",
+        "mail_server": "connected" if mail_ok else "disconnected",
         "timestamp": datetime.now().isoformat()
     }
 

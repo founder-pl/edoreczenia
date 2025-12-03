@@ -1,5 +1,24 @@
 services:
   # ===========================================
+  # Mailpit - Serwer SMTP/IMAP do testów
+  # ===========================================
+  mailpit:
+    image: axllent/mailpit:latest
+    container_name: szyfromat-mailpit
+    ports:
+      - "1026:1025"   # SMTP
+      - "8026:8025"   # Web UI
+      - "1144:1143"   # IMAP
+    environment:
+      MP_SMTP_AUTH_ACCEPT_ANY: 1
+      MP_SMTP_AUTH_ALLOW_INSECURE: 1
+      MP_ENABLE_IMAP: 1
+      MP_IMAP_AUTH_ACCEPT_ANY: 1
+    networks:
+      - szyfromat-net
+    restart: unless-stopped
+
+  # ===========================================
   # Szyfromat.pl Backend API (FastAPI)
   # ===========================================
   backend:
@@ -19,6 +38,15 @@ services:
       EDORECZENIA_CLIENT_SECRET: ${EDORECZENIA_CLIENT_SECRET:-test_client_secret}
       JWT_SECRET: ${JWT_SECRET:-szyfromat-secret-key-change-in-production}
       DATABASE_URL: ${DATABASE_URL:-sqlite:////data/szyfromat.db}
+      # Mail server config
+      SMTP_HOST: ${SMTP_HOST:-mailpit}
+      SMTP_PORT: ${SMTP_PORT:-1025}
+      IMAP_HOST: ${IMAP_HOST:-mailpit}
+      IMAP_PORT: ${IMAP_PORT:-1143}
+      MAIL_USER: ${MAIL_USER:-demo@szyfromat.pl}
+      MAIL_PASSWORD: ${MAIL_PASSWORD:-demo123}
+    depends_on:
+      - mailpit
     volumes:
       - sqlite-data:/data
     extra_hosts:

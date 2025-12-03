@@ -1,4 +1,4 @@
-import { BrowserRouter, Routes, Route, Navigate, Link, useLocation } from 'react-router-dom';
+import { BrowserRouter, Routes, Route, Navigate, Link, useLocation, useParams } from 'react-router-dom';
 import { useState, useEffect, createContext, useContext } from 'react';
 import { 
   Home, Mail, FileText, Settings, LogOut, Menu, X, Bell,
@@ -432,7 +432,9 @@ function DashboardPage() {
         <h2 className="text-lg font-semibold mb-4">Usługi</h2>
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
           {services.map(service => {
-            const isConnected = dashboard?.stats?.services?.[service.id];
+            const serviceStatus = dashboard?.stats?.services?.[service.id];
+            const isConnected = serviceStatus?.status === 'active';
+            const isPending = serviceStatus?.status === 'pending';
             return (
               <Link
                 key={service.id}
@@ -447,6 +449,11 @@ function DashboardPage() {
                     <span className="flex items-center gap-1 text-xs text-green-600 bg-green-50 px-2 py-1 rounded-full">
                       <CheckCircle size={12} />
                       Połączono
+                    </span>
+                  ) : isPending ? (
+                    <span className="flex items-center gap-1 text-xs text-yellow-600 bg-yellow-50 px-2 py-1 rounded-full">
+                      <Clock size={12} />
+                      Oczekuje
                     </span>
                   ) : (
                     <span className="flex items-center gap-1 text-xs text-gray-500 bg-gray-100 px-2 py-1 rounded-full">
@@ -709,6 +716,211 @@ function SettingsPage() {
   );
 }
 
+function ServiceDetailPage() {
+  const { serviceId } = useParams();
+  const [connection, setConnection] = useState(null);
+  const [messages, setMessages] = useState([]);
+  const [loading, setLoading] = useState(true);
+  
+  const serviceInfo = {
+    edoreczenia: { 
+      name: 'e-Doręczenia', 
+      icon: Mail, 
+      color: 'bg-red-500',
+      description: 'Oficjalna korespondencja elektroniczna z urzędami',
+      externalUrl: 'http://localhost:3500',
+      apiUrl: 'http://localhost:8500'
+    },
+    detax: { 
+      name: 'Detax AI', 
+      icon: FileText, 
+      color: 'bg-emerald-500',
+      description: 'Asystent AI do spraw podatkowych',
+      externalUrl: 'http://localhost:3005',
+      apiUrl: 'http://localhost:8005'
+    },
+    epuap: { 
+      name: 'ePUAP', 
+      icon: Building, 
+      color: 'bg-blue-500',
+      description: 'Elektroniczna Platforma Usług Administracji Publicznej',
+      externalUrl: 'https://epuap.gov.pl'
+    },
+    ksef: { 
+      name: 'KSeF', 
+      icon: CreditCard, 
+      color: 'bg-green-500',
+      description: 'Krajowy System e-Faktur',
+      externalUrl: 'https://ksef.mf.gov.pl'
+    }
+  };
+  
+  const service = serviceInfo[serviceId] || { name: serviceId, icon: Link2, color: 'bg-gray-500' };
+  const ServiceIcon = service.icon;
+  
+  useEffect(() => {
+    Promise.all([
+      api.services.connections(),
+      api.dashboard.unifiedInbox()
+    ])
+      .then(([connectionsData, inboxData]) => {
+        const conn = (connectionsData.connections || []).find(c => 
+          c.service_type.toLowerCase() === serviceId.toLowerCase()
+        );
+        setConnection(conn);
+        setMessages((inboxData.messages || []).filter(m => 
+          m.source.toLowerCase() === serviceId.toLowerCase()
+        ));
+      })
+      .catch(console.error)
+      .finally(() => setLoading(false));
+  }, [serviceId]);
+  
+  const handleConnect = async () => {
+    // Dla Detax - bezpośrednie przekierowanie SSO (nie wymaga połączenia)
+    if (serviceId === 'detax') {
+      const token = localStorage.getItem('idcard_token');
+      if (token && service.apiUrl) {
+        window.open(`${service.apiUrl}/sso?token=${token}&redirect=/`, '_blank');
+      } else {
+        window.open(service.externalUrl, '_blank');
+      }
+      return;
+    }
+    
+    // Dla e-Doręczeń - wymaga adresu ADE
+    const adeAddress = prompt('Podaj adres e-Doręczeń (AE:PL-...)');
+    if (!adeAddress) return;
+    
+    try {
+      await api.services.connect({
+        service_type: serviceId,
+        credentials: { ade_address: adeAddress },
+        config: { auth_method: 'oauth2' }
+      });
+      alert('Połączono!');
+      window.location.reload();
+    } catch (err) {
+      alert(`Błąd: ${err.message}`);
+    }
+  };
+  
+  const handleDisconnect = async () => {
+    if (!connection || !confirm('Czy na pewno chcesz rozłączyć?')) return;
+    
+    try {
+      await api.services.disconnect(connection.id);
+      alert('Rozłączono');
+      window.location.reload();
+    } catch (err) {
+      alert(`Błąd: ${err.message}`);
+    }
+  };
+  
+  if (loading) {
+    return <div className="flex justify-center py-12"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-idcard-600" /></div>;
+  }
+  
+  return (
+    <div className="space-y-6">
+      <div className="flex items-center gap-4">
+        <Link to="/services" className="p-2 hover:bg-gray-100 rounded-lg">
+          <ChevronRight className="rotate-180" size={20} />
+        </Link>
+        <div className={`w-12 h-12 ${service.color} rounded-lg flex items-center justify-center`}>
+          <ServiceIcon className="text-white" size={24} />
+        </div>
+        <div>
+          <h1 className="text-2xl font-bold text-gray-900">{service.name}</h1>
+          <p className="text-gray-500">{service.description}</p>
+        </div>
+      </div>
+      
+      {/* Status */}
+      <div className="bg-white rounded-xl shadow-sm border p-6">
+        <div className="flex items-center justify-between">
+          <div>
+            <h2 className="font-semibold mb-2">Status połączenia</h2>
+            {connection ? (
+              <div className="flex items-center gap-2">
+                <CheckCircle className="text-green-500" size={20} />
+                <span className="text-green-700 font-medium">Połączono</span>
+                <span className="text-gray-500">({connection.external_address})</span>
+              </div>
+            ) : (
+              <div className="flex items-center gap-2">
+                <AlertCircle className="text-yellow-500" size={20} />
+                <span className="text-yellow-700">Niepołączono</span>
+              </div>
+            )}
+          </div>
+          
+          <div className="flex gap-2">
+            {connection ? (
+              <>
+                <a
+                  href={service.apiUrl 
+                    ? `${service.apiUrl}/sso?token=${localStorage.getItem('idcard_token')}&redirect=/`
+                    : service.externalUrl
+                  }
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="px-4 py-2 bg-idcard-600 text-white rounded-lg hover:bg-idcard-700"
+                >
+                  Otwórz {service.name}
+                </a>
+                <button
+                  onClick={handleDisconnect}
+                  className="px-4 py-2 border border-red-300 text-red-600 rounded-lg hover:bg-red-50"
+                >
+                  Rozłącz
+                </button>
+              </>
+            ) : (
+              <button
+                onClick={handleConnect}
+                className="px-4 py-2 bg-idcard-600 text-white rounded-lg hover:bg-idcard-700"
+              >
+                Połącz
+              </button>
+            )}
+          </div>
+        </div>
+      </div>
+      
+      {/* Messages */}
+      {connection && (
+        <div>
+          <h2 className="text-lg font-semibold mb-4">Wiadomości z {service.name}</h2>
+          <div className="bg-white rounded-xl shadow-sm border divide-y">
+            {messages.length > 0 ? (
+              messages.map(msg => (
+                <div key={msg.id} className="p-4 hover:bg-gray-50">
+                  <div className="flex items-start gap-4">
+                    <div className="text-2xl">{msg.source_icon || '📧'}</div>
+                    <div className="flex-1">
+                      <p className="font-medium">{msg.subject}</p>
+                      <p className="text-sm text-gray-500">{msg.sender}</p>
+                    </div>
+                    <span className="text-xs text-gray-400">
+                      {new Date(msg.received_at).toLocaleDateString('pl-PL')}
+                    </span>
+                  </div>
+                </div>
+              ))
+            ) : (
+              <div className="p-8 text-center text-gray-500">
+                <Mail size={32} className="mx-auto mb-2 text-gray-300" />
+                <p>Brak wiadomości</p>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ═══════════════════════════════════════════════════════════════
 // APP
 // ═══════════════════════════════════════════════════════════════
@@ -748,6 +960,7 @@ function AppRoutes() {
       <Route path="/" element={<ProtectedRoute><DashboardPage /></ProtectedRoute>} />
       <Route path="/inbox" element={<ProtectedRoute><InboxPage /></ProtectedRoute>} />
       <Route path="/services" element={<ProtectedRoute><ServicesPage /></ProtectedRoute>} />
+      <Route path="/services/:serviceId" element={<ProtectedRoute><ServiceDetailPage /></ProtectedRoute>} />
       <Route path="/settings" element={<ProtectedRoute><SettingsPage /></ProtectedRoute>} />
     </Routes>
   );

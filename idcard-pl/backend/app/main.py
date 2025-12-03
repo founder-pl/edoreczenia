@@ -171,7 +171,7 @@ class UnifiedNotification(BaseModel):
 
 users_db: Dict[str, Dict] = {}
 connections_db: Dict[str, List[ServiceConnection]] = {}
-notifications_db: Dict[str, List[UnifiedNotification]] = []
+notifications_db: Dict[str, List[UnifiedNotification]] = {}
 email_aliases_db: Dict[str, EmailAlias] = {}  # alias -> EmailAlias
 
 def generate_email_aliases(user_id: str, email: str, nip: str = None, krs: str = None, 

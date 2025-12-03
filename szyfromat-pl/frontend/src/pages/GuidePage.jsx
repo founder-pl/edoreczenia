@@ -5,6 +5,12 @@ import {
   User, Shield, Mail, FileText, Building, CreditCard
 } from 'lucide-react';
 
+// URL-e dla wersji dev (localhost) i produkcyjnej
+const isDev = window.location.hostname === 'localhost';
+const URLS = {
+  idcard: isDev ? 'http://localhost:4100' : 'https://idcard.pl',
+};
+
 const steps = [
   {
     id: 1,
@@ -13,7 +19,7 @@ const steps = [
     icon: User,
     action: {
       label: 'Otwórz Panel IDCard.pl',
-      url: 'https://idcard.pl/'
+      url: URLS.idcard
     },
     tips: [
       'Użyj aktualnego adresu e-mail',
